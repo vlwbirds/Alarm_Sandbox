@@ -26,9 +26,10 @@ df <- hwk_data
 # Filter the data for rows where hwk is equal to 1
 hwk1_data <- df[df$hwk == 1,]
 hwk_height_na <- hwk1_data %>% drop_na(Pre_Bird_Height)
+hwk_less10 <- subset(hwk_height_na, Pre_Bird_Height <= 15)
 
 # Calculate the unique integer "Pre_Height" values within hwk1_data
-unique_pre_heights <- unique(round(hwk_height_na$Pre_Bird_Height))
+unique_pre_heights <- unique(round(hwk_less10$Pre_Bird_Height))
 
 # Initialize empty vectors to store the percentages and sample sizes
 percentage_values <- numeric(length(unique_pre_heights))
@@ -37,13 +38,370 @@ sample_sizes <- numeric(length(unique_pre_heights))
 # Calculate the percentage and sample size for each unique integer "Pre_Height" value within hwk1_data
 for (i in 1:length(unique_pre_heights)) {
   pre_height_value <- unique_pre_heights[i]
-  total_count <- sum(round(hwk_height_na$Pre_Bird_Height) == pre_height_value)
-  alarm_count <- sum(round(hwk_height_na$Pre_Bird_Height) == pre_height_value & hwk_height_na$Audio_React == "a")
+  total_count <- sum(round(hwk_less10$Pre_Bird_Height) == pre_height_value)
+  alarm_count <- sum(round(hwk_less10$Pre_Bird_Height) == pre_height_value & hwk_height_na$Audio_React == "a")
   percentage_values[i] <- (alarm_count / total_count) * 100
-  sample_sizes[i] <- total_count
+  sample_sizes[i] <- alarm_count
 }
 
 # Create a data frame for plotting
 plot_data <- data.frame(Pre_Height = unique_pre_heights, Percentage = percentage_values, Sample_Size = sample_sizes)
+
+# Create a scatter plot with Pre_Height on the x-axis and Percentage on the y-axis
+p <- ggplot(plot_data, aes(x = Pre_Height, y = Percentage)) +
+  geom_point() +  # Scatter plot
+  labs(x = "Bird Height", y = "Percentage of Alarm Instances") +
+  theme_minimal() +
+  geom_text(aes(label = Sample_Size), hjust = -0.4, vjust = 0.5) + 
+  scale_x_continuous(breaks = unique_pre_heights) #+  # Add integer labels to the x-axis
+  
+  # Add a linear regression line while keeping the line between points
+  #geom_smooth(method = "lm", se = FALSE, color = "blue")
+
+p +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 3))
+
+# polynomial lines
+fit1 <- lm(Percentage~Pre_Height, data=plot_data)
+fit2 <- lm(Percentage~poly(Pre_Height,2,raw=TRUE), data=plot_data)
+fit3 <- lm(Percentage~poly(Pre_Height,3,raw=TRUE), data=plot_data)
+fit4 <- lm(Percentage~poly(Pre_Height,4,raw=TRUE), data=plot_data)
+fit5 <- lm(Percentage~poly(Pre_Height,5,raw=TRUE), data=plot_data)
+
+#calculated adjusted R-squared of each model
+summary(fit1)$adj.r.squared
+summary(fit2)$adj.r.squared
+summary(fit3)$adj.r.squared
+summary(fit4)$adj.r.squared
+summary(fit5)$adj.r.squared
+```
+
+```{r}
+#create data frame
+df <- data.frame(x=1:15,
+                 y=c(3, 14, 23, 25, 23, 15, 9, 5, 9, 13, 17, 24, 32, 36, 46))
+
+#create a scatterplot of x vs. y
+plot(df$x, df$y, pch=19, xlab='x', ylab='y')
+
+#fit polynomial regression models up to degree 5
+fit1 <- lm(y~x, data=df)
+fit2 <- lm(y~poly(x,2,raw=TRUE), data=df)
+fit3 <- lm(y~poly(x,3,raw=TRUE), data=df)
+fit4 <- lm(y~poly(x,4,raw=TRUE), data=df)
+fit5 <- lm(y~poly(x,5,raw=TRUE), data=df)
+
+#create a scatterplot of x vs. y
+plot(df$x, df$y, pch=19, xlab='x', ylab='y')
+
+#define x-axis values
+x_axis <- seq(1, 15, length=15)
+
+#add curve of each model to plot
+lines(x_axis, predict(fit1, data.frame(x=x_axis)), col='green')
+lines(x_axis, predict(fit2, data.frame(x=x_axis)), col='red')
+lines(x_axis, predict(fit3, data.frame(x=x_axis)), col='purple')
+lines(x_axis, predict(fit4, data.frame(x=x_axis)), col='blue')
+lines(x_axis, predict(fit5, data.frame(x=x_axis)), col='orange')
+
+#calculated adjusted R-squared of each model
+summary(fit1)$adj.r.squared
+summary(fit2)$adj.r.squared
+summary(fit3)$adj.r.squared
+summary(fit4)$adj.r.squared
+summary(fit5)$adj.r.squared
+
+```
+
+## Alarm Sex
+
+```{r}
+
+# Filter data to include only species with alarm call "a"
+hwk1_data <- df[df$hwk == 1,]
+hwk_alarm_data <- hwk1_data %>% filter(Audio_React == "a")
+hwk_audio_na <- hwk_alarm_data %>% drop_na(Audio_React)
+hwk_sex_na <- hwk_audio_na %>% drop_na(Sex)
+
+# Convert Sex column to lowercase
+hwk_sex_na$Sex <- tolower(hwk_sex_na$Sex)
+
+# Group by species and sex, then calculate the percentage
+df_species_sex <- hwk_sex_na %>%
+  group_by(Scientific, Sex) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = (Count / sum(Count)) * 100)
+
+# Create the bar plot
+ggplot(df_species_sex, aes(x = Scientific, y = Percentage, fill = Sex)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of Alarms by Sex for Each Species", x = "Species", y = "Percentage") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+## Abundance and Richness by Species
+
+```{r}
+
+library(dplyr)
+library(ggplot2)
+
+# Step 1: Filter data to include only timestamps where Audio_React is "a"
+df <- hwk_data
+hwk1_data <- df[df$hwk == 1,]
+
+# Identify the timestamps where any species has an alarm call "a"
+alarm_timestamps <- hwk1_data %>%
+  filter(Audio_React == "a") %>%
+  select(Timestamp) %>%
+  distinct()
+
+# Filter original data to keep only those timestamps
+filtered_data <- hwk1_data %>%
+  filter(Timestamp %in% alarm_timestamps$Timestamp)
+
+# Step 2: Filter out species that never alarm
+species_with_alarms <- filtered_data %>%
+  group_by(Scientific) %>%
+  filter(any(Audio_React == "a")) %>%
+  ungroup()
+
+# Step 3: Calculate richness, abundance, and alarm percentage for each species and timestamp
+species_data <- species_with_alarms %>%
+  group_by(Timestamp) %>% 
+  mutate(
+    Richness = n_distinct(Scientific), # Number of unique species in the flock
+    Abundance = n(),  # Total number of individuals in the flock
+    Alarm_Count = sum(Audio_React == "a"),
+    Alarm_Percentage = (Alarm_Count / Abundance) * 100
+  ) %>%
+  ungroup()
+
+# Step 4: Create a plot for each species that has alarms
+species_list <- unique(species_data$Scientific)
+
+for (sp in species_list) {
+  species_subset <- species_data %>% filter(Scientific == sp)
+  
+  p <- ggplot(species_subset) +
+    geom_point(aes(x = Abundance, y = Alarm_Percentage, color = "Abundance"), size = 3) +
+    geom_smooth(aes(x = Abundance, y = Alarm_Percentage, color = "Abundance"), 
+                method = "lm", formula = y ~ poly(x, 2), se = FALSE) +
+    geom_point(aes(x = Richness, y = Alarm_Percentage, color = "Richness"), size = 3) +
+    geom_smooth(aes(x = Richness, y = Alarm_Percentage, color = "Richness"), 
+                method = "lm", formula = y ~ poly(x, 2), se = FALSE) +
+    labs(title = paste("Alarm Percentage vs Abundance and Richness for", sp), 
+         x = "Abundance and Richness", 
+         y = "Alarm Percentage (%)") +
+    scale_color_manual(values = c("Abundance" = "red", "Richness" = "blue")) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)  # This will display the plot for each species in the loop
+}
+
+```
+
+## Alarm and Richness Flock Size
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Step 1: Filter data to include only timestamps where Audio_React is "a"
+df <- hwk_data
+hwk1_data <- df[df$hwk == 1,]
+
+# Identify the timestamps where any species has an alarm call "a"
+alarm_timestamps <- hwk1_data %>%
+  filter(Audio_React == "a") %>%
+  select(Timestamp) %>%
+  distinct()
+
+# Filter original data to keep only those timestamps
+filtered_data <- hwk1_data %>%
+  filter(Timestamp %in% alarm_timestamps$Timestamp)
+
+# Step 2: Filter out species that never alarm
+species_with_alarms <- filtered_data %>%
+  group_by(Scientific) %>%
+  filter(any(Audio_React == "a")) %>%
+  ungroup()
+
+# Step 3: Calculate richness, abundance, and alarm percentage for each species and timestamp
+species_data <- species_with_alarms %>%
+  group_by(Timestamp) %>% 
+  mutate(
+    Richness = n_distinct(Scientific), # Number of unique species in the flock
+    Abundance = n(),  # Total number of individuals in the flock
+    Alarm_Count = sum(Audio_React == "a"),
+    Alarm_Percentage = (Alarm_Count / Abundance) * 100
+  ) %>%
+  ungroup()
+
+# Remove duplicate rows for plotting
+plot_data <- species_data %>%
+  group_by(Scientific) %>%
+  summarise(
+    Avg_Richness = mean(Richness),
+    Avg_Abundance = mean(Abundance),
+    Avg_Alarm_Percentage = mean(Alarm_Percentage)
+  ) %>%
+  ungroup()
+
+# Plot Alarm Percentage vs Richness and Abundance
+p <- ggplot(plot_data) +
+  geom_point(aes(x = Avg_Richness, y = Avg_Alarm_Percentage, color = "Richness"), size = 3) +
+  geom_smooth(aes(x = Avg_Richness, y = Avg_Alarm_Percentage, color = "Richness"), 
+              method = "lm", formula = y ~ poly(x, 2), se = TRUE) +
+  geom_point(aes(x = Avg_Abundance, y = Avg_Alarm_Percentage, color = "Abundance"), size = 3) +
+  geom_smooth(aes(x = Avg_Abundance, y = Avg_Alarm_Percentage, color = "Abundance"), 
+              method = "lm", formula = y ~ poly(x, 2), se = TRUE) +
+  labs(title = "Alarm Percentage vs Richness and Abundance", 
+       x = "Richness and Abundance", 
+       y = "Average Alarm Percentage (%)") +
+  scale_color_manual(values = c("Richness" = "blue", "Abundance" = "red")) +
+  theme_minimal() +
+  theme(legend.title = element_blank(), legend.position = "bottom")
+
+# Print the plot
+print(p)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Step 1: Filter data to include only relevant columns
+hwk1_data <- df[df$hwk == 1,]
+
+# Step 2: Calculate abundance, richness, and alarm percentage for each timestamp
+timestamp_data <- hwk1_data %>%
+  group_by(Timestamp) %>%
+  summarise(
+    Abundance = n(),  # Total number of individuals in the flock
+    Richness = n_distinct(Scientific),  # Number of unique species in the flock
+    Alarm_Count = sum(Audio_React == "a"),
+    Alarm_Percentage = ifelse(Abundance > 0, (Alarm_Count / Abundance) * 100, 0)
+  ) %>%
+  ungroup()
+
+# Step 3: Remove instances with 0% alarm percentage
+filtered_data <- timestamp_data %>%
+  filter(Alarm_Percentage > 0)
+
+# Step 4: Plot Abundance and Richness vs Alarm Percentage
+p <- ggplot(filtered_data) +
+  geom_point(aes(x = Richness, y = Alarm_Percentage, color = "Richness"), size = 3) +
+  geom_smooth(aes(x = Richness, y = Alarm_Percentage, color = "Richness"), 
+              method = "lm", formula = y ~ poly(x, 1), se = TRUE) +
+  geom_point(aes(x = Abundance, y = Alarm_Percentage, color = "Abundance"), size = 3) +
+  geom_smooth(aes(x = Abundance, y = Alarm_Percentage, color = "Abundance"), 
+              method = "lm", formula = y ~ poly(x, 1), se = TRUE) +
+  labs(title = "Alarm Percentage vs Abundance and Richness", 
+       x = "Abundance and Richness", 
+       y = "Alarm Percentage (%)") +
+  scale_color_manual(values = c("Richness" = "blue", "Abundance" = "red")) +
+  scale_x_continuous(limits = c(0, 24)) +  # Set x-axis limit to 24
+  scale_y_continuous(limits = c(0, 100)) +
+  theme_minimal() +
+  theme(legend.title = element_blank(), legend.position = "bottom")
+
+# Print the plot
+print(p)
+
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Filter the data for rows where hwk is equal to 1 and Mid_Vocal is not NA
+filtered_data <- df %>%
+  filter(hwk == 1, !is.na(Mid_Vocal))
+
+# Define the order of levels for Mid_Vocal
+order_levels <- c("alarm", "call", "quiet", "song")
+
+# Reorder the Mid_Vocal factor according to the defined order
+filtered_data$Mid_Vocal <- factor(filtered_data$Mid_Vocal, levels = order_levels)
+
+# Calculate the total count within each Tar_Sp2 category
+total_counts <- filtered_data %>%
+  group_by(Scientific) %>%
+  summarize(total = n()) %>%
+  ungroup()
+
+# Calculate the percentage of each Mid_Vocal category within each Tar_Sp2 category
+percentage_data <- filtered_data %>%
+  group_by(Scientific, Mid_Vocal) %>%
+  summarize(Count = n()) %>%
+  ungroup() %>%
+  left_join(total_counts, by = "Scientific") %>%
+  mutate(Percentage = (Count / total) * 100)
+
+# Filter to only include species with "alarm" occurrences
+filtered_species <- percentage_data %>%
+  filter(Mid_Vocal %in% order_levels)
+
+# Create a stacked bar chart with the percentages
+p <- ggplot(filtered_species, aes(x = Scientific, y = Percentage, fill = Mid_Vocal)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  labs(x = "Tar_Sp2", y = "Percentage (%)", title = "Percentage of Mid_Vocal Responses by Tar_Sp2") +
+  scale_y_continuous(limits = c(0, 100)) +  # Set y-axis limits to 0-100%
+  scale_fill_manual(
+    values = c("alarm" = "gray20", "call" = "gray40", "quiet" = "gray60", "song" = "gray"),
+    guide = guide_legend(reverse = TRUE)  # Reverse the legend order
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10))
+
+# Print the plot
+print(p)
+
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Filter the data for rows where hwk is equal to 1 and Mid_Vocal is not NA
+filtered_data <- df %>%
+  filter(hwk == 1, !is.na(Mid_Vocal))
+
+# Define the order of levels for Mid_Vocal with "alarm" at the bottom
+order_levels <- c("alarm", "call", "quiet", "song")
+
+# Reorder the Mid_Vocal factor according to the defined order
+filtered_data$Mid_Vocal <- factor(filtered_data$Mid_Vocal, levels = order_levels)
+
+# Calculate the total count of Mid_Vocal responses for each species
+total_counts <- filtered_data %>%
+  group_by(Scientific) %>%
+  summarize(total = n(), .groups = 'drop')
+
+# Calculate the count of each Mid_Vocal category within each species
+percentage_data <- filtered_data %>%
+  group_by(Scientific, Mid_Vocal) %>%
+  summarize(Count = n(), .groups = 'drop') %>%
+  left_join(total_counts, by = "Scientific") %>%
+  mutate(Percentage = (Count / total) * 100)
+
+# Create a stacked bar chart with the percentages, ensuring "alarm" is at the bottom
+p <- ggplot(percentage_data, aes(x = Scientific, y = Percentage, fill = Mid_Vocal)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  labs(x = "Species", y = "Percentage (%)", title = "Percentage of Mid_Vocal Responses by Species") +
+  scale_y_continuous(limits = c(0, 100)) +  # Set y-axis limits to 0-100%
+  scale_fill_manual(
+    values = c("alarm" = "gray20", "call" = "gray40", "quiet" = "gray60", "song" = "gray80"),
+    guide = guide_legend(reverse = TRUE)  # Reverse the legend order
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10))  # Rotate x-axis labels for readability
+
+# Print the plot
+print(p)
 
 ```
