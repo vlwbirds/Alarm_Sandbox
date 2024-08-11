@@ -1,0 +1,49 @@
+---
+title: "Alarm Sandbox"
+format: html
+editor: visual
+---
+
+## Libraries & Data
+
+```{r}
+library(here)
+library(tidyverse)
+
+hwk_data <- read_csv(here("data/HwkAll.csv"))
+hwk_data[hwk_data=="na"] <- NA
+hwk_data$Pre_Bird_Height <-  as.numeric(hwk_data$Pre_Bird_Height)
+view(hwk_data)
+str(hwk_data)
+```
+
+## Alarm Height
+
+```{r}
+# Read the data from the "hwk" CSV file
+df <- hwk_data  
+
+# Filter the data for rows where hwk is equal to 1
+hwk1_data <- df[df$hwk == 1,]
+hwk_height_na <- hwk1_data %>% drop_na(Pre_Bird_Height)
+
+# Calculate the unique integer "Pre_Height" values within hwk1_data
+unique_pre_heights <- unique(round(hwk_height_na$Pre_Bird_Height))
+
+# Initialize empty vectors to store the percentages and sample sizes
+percentage_values <- numeric(length(unique_pre_heights))
+sample_sizes <- numeric(length(unique_pre_heights))
+
+# Calculate the percentage and sample size for each unique integer "Pre_Height" value within hwk1_data
+for (i in 1:length(unique_pre_heights)) {
+  pre_height_value <- unique_pre_heights[i]
+  total_count <- sum(round(hwk_height_na$Pre_Bird_Height) == pre_height_value)
+  alarm_count <- sum(round(hwk_height_na$Pre_Bird_Height) == pre_height_value & hwk_height_na$Audio_React == "a")
+  percentage_values[i] <- (alarm_count / total_count) * 100
+  sample_sizes[i] <- total_count
+}
+
+# Create a data frame for plotting
+plot_data <- data.frame(Pre_Height = unique_pre_heights, Percentage = percentage_values, Sample_Size = sample_sizes)
+
+```

@@ -2,8 +2,9 @@
 ######################## Alarm % Sandbox ###########################
 ####################################################################
 
-hwk_data <- read.csv("~/Documents/GradSchool/Code/R/FFL/VLW_FFL_Alarm_Sandbox/hwk2.csv")
+hwk_data <- read.csv(here("hwk2.csv"))
 head(hwk_data)
+view(hwk_data)
 
 ##### Alarm % Pre_Height ######
 
