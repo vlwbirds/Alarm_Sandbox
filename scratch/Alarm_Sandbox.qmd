@@ -11,8 +11,9 @@ library(here)
 library(tidyverse)
 
 hwk_data <- read_csv(here("data/HwkAll.csv"))
-hwk_data[hwk_data=="na"] <- NA
+hwk_data[hwk_data== c("na", "#N/A")] <- NA
 hwk_data$Pre_Bird_Height <-  as.numeric(hwk_data$Pre_Bird_Height)
+
 view(hwk_data)
 str(hwk_data)
 ```
@@ -197,7 +198,7 @@ for (sp in species_list) {
          y = "Alarm Percentage (%)") +
     scale_color_manual(values = c("Abundance" = "red", "Richness" = "blue")) +
     theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    theme(axis.text.x = element_text(angle = 0, hjust = 1))
   
   print(p)  # This will display the plot for each species in the loop
 }
@@ -404,4 +405,193 @@ p <- ggplot(percentage_data, aes(x = Scientific, y = Percentage, fill = Mid_Voca
 # Print the plot
 print(p)
 
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Sample dataframe (replace this with your actual dataframe)
+df <- hwk_data
+
+filtered_data <- df %>%
+  filter(!is.na(Mid_Vocal))
+
+# Transform data from wide to long format
+long_data <- filtered_data %>%
+  pivot_longer(cols = starts_with("Rad_"), 
+               names_to = "Height_Category", 
+               values_to = "Density") %>%
+  mutate(Height = as.numeric(gsub("Rad_", "", Height_Category))) %>%
+  select(Scientific, Height, Density) %>%
+  drop_na()  # Drop rows with NA values
+
+# Normalize density to represent 100% for each meter
+long_data <- long_data %>%
+  group_by(Scientific, Height) %>%
+  mutate(Density = Density / sum(Density)) %>%
+  ungroup()
+
+# List of unique species
+species_list <- unique(long_data$Scientific)
+
+# Loop through each species and create plots
+for (species in species_list) {
+  species_data <- long_data %>% filter(Scientific == species)
+  
+  p <- ggplot(species_data, aes(x = as.factor(Height), y = Density, group = Height)) +
+    geom_violin(fill = "lightblue", color = "black", scale = "width") +
+    labs(x = "Height (m)", y = "Normalized Density (%)", title = paste("Violin Plot for", species)) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10))  # Keep x-axis labels horizontal
+  
+  # Save or print the plot
+  ggsave(filename = paste0("violin_plot_", species, ".png"), plot = p)
+  # Or simply print
+  # print(p)
+}
+
+```
+
+## Density 10 Meter Intervals
+
+```{r}
+# Assuming df is your dataframe with columns for Pre_Height and Rad_01 to Rad_10
+df <- hwk_data
+
+# Drop rows with NA values in Pre_Bird_Height, Rad_01, Rad_02, ..., Rad_10
+df <- df %>%
+  drop_na(Pre_Bird_Height, starts_with("Rad_"))
+
+# Ensure that Pre_Bird_Height and Rad_01 to Rad_10 are numeric
+df <- df %>%
+  mutate(across(c(Pre_Bird_Height, starts_with("Rad_")), as.numeric))
+
+# Define a function to calculate the density metrics
+calculate_density_metrics <- function(height, density_cols) {
+  # Ensure height is within valid range
+  height <- pmin(pmax(height, 1), 10)
+  
+  # If Pre_Height is 0, use the value for Rad_01
+  if (height == 0) {
+    density_at_height <- density_cols[1]
+  } else {
+    # Calculate Density at Pre_Bird_Height
+    density_at_height <- density_cols[height]
+  }
+  
+  # Initialize vectors to store the averages
+  above_density <- numeric(10)
+  below_density <- numeric(10)
+  combined_density <- numeric(10)
+  
+  # Calculate the average density for above, below, and combined
+  for (i in 1:10) {
+    above_density[i] <- mean(density_cols[height:min(10, height + i)], na.rm = TRUE)
+    below_density[i] <- mean(density_cols[max(1, height - i):height], na.rm = TRUE)
+    combined_density[i] <- mean(density_cols[max(1, height - i):min(10, height + i)], na.rm = TRUE)
+  }
+  
+  # Create a list to store the results
+  list(
+    density_at_height = density_at_height,
+    above_density = above_density,
+    below_density = below_density,
+    combined_density = combined_density
+  )
+}
+
+# Apply the function to each row and create new columns in the dataframe
+rad_df <- df %>%
+  rowwise() %>%
+  mutate(
+    Density_At_Pre_Height = calculate_density_metrics(Pre_Bird_Height, c_across(starts_with("Rad_")))$density_at_height,
+    Density_Above_List = list(calculate_density_metrics(Pre_Bird_Height, c_across(starts_with("Rad_")))$above_density),
+    Density_Below_List = list(calculate_density_metrics(Pre_Bird_Height, c_across(starts_with("Rad_")))$below_density),
+    Density_Combined_List = list(calculate_density_metrics(Pre_Bird_Height, c_across(starts_with("Rad_")))$combined_density)
+  ) %>%
+  unnest_wider(Density_Above_List, names_sep = "_Above") %>%
+  unnest_wider(Density_Below_List, names_sep = "_Below") %>%
+  unnest_wider(Density_Combined_List, names_sep = "_Combined") %>%
+  ungroup()
+
+# View the updated dataframe
+print(rad_df)
+str(rad_df)
+```
+
+```{r}
+# Assuming rad_df is your dataframe with the column Pre_Bird_Dense
+
+# Convert Pre_Bird_Dense to a character if it isn't already
+rad_df$Pre_Bird_Dense <- as.character(rad_df$Pre_Bird_Dense)
+
+# Function to calculate Pre_Dense_Avg based on the format in Pre_Bird_Dense
+calculate_pre_dense_avg <- function(dense_string) {
+  # Split the string into individual characters, convert to numeric, and remove NAs
+  dense_values <- na.omit(as.numeric(strsplit(dense_string, "")[[1]]))
+  
+  # Calculate the average of the numeric values
+  dense_avg <- mean(dense_values, na.rm = TRUE)
+  
+  return(dense_avg)
+}
+
+# Apply the function to each row to calculate Pre_Dense_Avg and create a new dataframe dense_df
+dense_df <- rad_df %>%
+  mutate(Pre_Dense_Avg = sapply(Pre_Bird_Dense, calculate_pre_dense_avg))
+
+# View the updated dense_df
+print(dense_df)
+head(dense_df)
+```
+
+## GLM Permutations
+
+```{r}
+
+# load data
+glm_df <- dense_df
+
+# filter na and hwk
+glm_hwk <- glm_df[df$hwk == 1,]
+glm_dense_na <- glm_hwk %>% drop_na(Density_At_Pre_Height)
+
+# List of independent variables (ensure there are no leading or trailing spaces)
+independent_vars <- c("Spp", "Sex", "Flock_size", "Social_Index", "Flight_proximity", 
+"Pre_Height", "Veg_dense_under_avg", "Veg_under_height", "Pre_Dense", "Pre_Height", "Veg_dense_under_avg", "Veg_under_height", "Pre_Dense", "Veg_mid_low", "Veg_mid_high","Rad_Avg_Dense")
+
+# List to store model outputs
+model_outputs <- list()
+
+# Generate all combinations of independent variables
+all_combinations <- lapply(seq_along(independent_vars), function(n) combn(independent_vars, n, simplify = FALSE))
+
+# Flatten the list of combinations
+all_combinations <- unlist(all_combinations, recursive = FALSE)
+
+# Run GLM models for each combination
+for (vars in all_combinations) {
+  formula_string <- paste("Alarm ~", paste(vars, collapse = " + "))
+  model <- glm(as.formula(formula_string), data = df_filtered, family = binomial(link = "logit"))
+  # Extract AIC and other model output
+  model_output <- broom::tidy(model)
+  model_output$AIC <- AIC(model)
+  # Store model output in list
+  model_outputs[[paste(vars, collapse = "_")]] <- model_output
+}
+
+# Combine model outputs into one large table
+combined_table <- bind_rows(model_outputs, .id = "Combination")
+
+# Print the combined table
+# print(combined_table)
+
+
+# Define the file path using here()
+file_path <- here("output", "all_model_AIC_table.csv")
+
+# Write the combined table to the CSV file
+write.csv(combined_table, file_path, row.names = FALSE)
 ```
