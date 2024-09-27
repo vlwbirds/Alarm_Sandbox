@@ -7,15 +7,21 @@ editor: visual
 ## Libraries & Data
 
 ```{r}
+library(igraph)
+library(RColorBrewer)
+library(viridis)
 library(here)
 library(tidyverse)
 
+# Loads all hawk data
 hwk_data <- read_csv(here("data/HwkAll.csv"))
+
+# Cleans and Assigns Data
 hwk_data[hwk_data== c("na", "#N/A")] <- NA
 hwk_data$Pre_Bird_Height <-  as.numeric(hwk_data$Pre_Bird_Height)
 hwk_data$Flight_apex <- as.numeric((hwk_data$Flight_apex))
 
-#view(hwk_data)
+view(hwk_data)
 #str(hwk_data)
 
 social_alarm <- read_csv(here("data/Social_Alarm.csv"))
@@ -60,10 +66,11 @@ ggplot(plot_data, aes(x = Group, y = Percentage, fill = Group)) +
   labs(title = "Percentage of Alarm Call Reactions by Sociality Across All Individuals",
        y = "Alarm Percentage",
        x = "Social Group") +
-  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 50)) +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 330, vjust = .5, hjust = 0)) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 50))
 
-# ggsave(here("figs/Alarm_Sociality_Individuals.png"))
+dggsave(here("figs/Alarm_Sociality_Individuals.png"))
 ```
 
 ## Alarm Social Group Flock Level
@@ -71,6 +78,7 @@ ggplot(plot_data, aes(x = Group, y = Percentage, fill = Group)) +
 ```{r}
 #subsetting for only treatment
 hwk_subset <- subset(social_alarm, hwk == 1)
+view(hwk_subset)
 
 
 # percentages of alarm by social structure
@@ -100,12 +108,15 @@ plot_data <- data.frame(
 # Create a bar plot
 ggplot(plot_data, aes(x = Group, y = Percentage, fill = Group)) +
   geom_bar(stat = "identity", position = "dodge") +
-  geom_text(aes(label = paste("n =", SampleSize)), position = position_dodge(width = 0.9), vjust = -0.5) +
-  labs(title = "Percentage of Alarm Call Reactions by Sociality Across All Individuals",
+  geom_text(aes(label = paste("n =", SampleSize)), 
+            position = position_dodge(width = 0.9), vjust = -0.5) +
+  labs(title = "Percentage of Alarm Call Reactions by Sociality Across Group Types",
        y = "Alarm Percentage",
        x = "Social Group") +
-  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 50)) +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 330, vjust = .5, hjust = 0)) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 50))
+
 
 ggsave(here("figs/Alarm_Sociality_Groups.png"))
 ```
@@ -169,7 +180,7 @@ p +
 #summary(fit5)$adj.r.squared
 ```
 
-## dAlarm Height and Predator Height
+## Alarm Height and Predator Height
 
 ```{r}
 # Read the data from the "hwk" CSV file
@@ -725,6 +736,8 @@ grid.arrange(p1, p2, ncol = 1, heights = c(2/3, 1/3))
 
 ```
 
+## Alarm Height and Hawk Difference
+
 ```{r}
 # Load necessary libraries
 library(ggplot2)
@@ -737,6 +750,9 @@ df <- hwk_data
 hwk1_data <- df %>% 
   filter(hwk == 1) %>%
   drop_na(Pre_Bird_Height, Flight_apex, Audio_React)
+
+# Calculate the height difference between Flight_apex and Pre_Bird_Height
+hwk1_data <- hwk1_data %>% mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
 
 # Subset for Pre_Bird_Height <= 15
 hwk_less15 <- subset(hwk1_data, Pre_Bird_Height <= 15)
@@ -760,8 +776,9 @@ scatter_data <- alarm_summary %>%
 
 # Boxplot data for Flight_apex (grouped by rounded Pre_Bird_Height)
 boxplot_data <- hwk_less15 %>%
+  filter(alarm == 1) %>% 
   mutate(rounded_height = round(Pre_Bird_Height)) %>%
-  select(rounded_height, Flight_apex)
+  select(rounded_height, Height_Difference)
 
 # Create the plot
 p <- ggplot() +
@@ -770,13 +787,148 @@ p <- ggplot() +
   # Linear regression line with cubic polynomial and confidence interval
   geom_smooth(data = scatter_data, aes(x = x, y = y), method = "lm", formula = y ~ poly(x, 3), se = TRUE, color = "blue") +
   # Boxplots for Flight Apex centered on scatter points
-  geom_boxplot(data = boxplot_data, aes(x = rounded_height, y = Flight_apex, group = factor(rounded_height)), 
+  geom_boxplot(data = boxplot_data, aes(x = rounded_height, y = Height_Difference, group = factor(rounded_height)), 
                width = 0.3, color = "red", alpha = 0.5, position = position_dodge(width = 0.0)) +
   # Set axis labels and title
   labs(x = "Pre-Bird Height (meters)", y = "Alarm Percentage (%)") +
   theme_minimal() +
   scale_y_continuous(
-    sec.axis = sec_axis(~., name = "Flight Apex (meters)")  # Secondary y-axis for Flight Apex
+    sec.axis = sec_axis(~., name = "Predator Height Difference (meters)"),  # Secondary y-axis for Flight Apex
+  limits = c(-10, 10)) +
+  theme(
+    axis.title.y.left = element_text(color = "blue"),
+    axis.title.y.right = element_text(color = "red")
+  )
+
+# Display the plot
+print(p)
+
+```
+
+```{r}
+# Assuming your data is stored in the 'hwk_data' dataframe
+df <- hwk_data  
+
+# Filter the data for rows where hwk is equal to 1 and drop NA values in relevant columns
+hwk1_data <- df %>% 
+  filter(hwk == 1) %>%
+  drop_na(Pre_Bird_Height, Flight_apex, Audio_React)
+
+# Calculate the height difference between Flight_apex and Pre_Bird_Height
+hwk1_data <- hwk1_data %>% mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+
+# Subset for Pre_Bird_Height <= 15
+hwk_less15 <- subset(hwk1_data, Pre_Bird_Height <= 15)
+
+# Create a summary for alarm percentage
+alarm_summary <- hwk_less15 %>%
+  group_by(rounded_height = round(Pre_Bird_Height)) %>%
+  summarise(
+    total_count = n(),
+    alarm_count = sum(Audio_React == "a"),
+    alarm_percentage = (alarm_count / total_count) * 100
+  )
+
+# Scatter plot data
+scatter_data <- alarm_summary %>%
+  select(rounded_height, alarm_percentage) %>%
+  rename(x = rounded_height, y = alarm_percentage)
+
+# Boxplot data for Flight_Apex (grouped by rounded Pre_Bird_Height)
+boxplot_data <- hwk_less15 %>%
+  mutate(rounded_height = round(Pre_Bird_Height)) %>%
+  select(rounded_height, Height_Difference)
+
+# Define the scaling factor for the right y-axis to stretch it across the same space as the left axis
+scaling_factor <- 60 / 20  # Left axis range (60) / Right axis range (20)
+
+# Create the plot
+p <- ggplot() +
+  # Scatter plot for alarm percentage
+  geom_point(data = scatter_data, aes(x = x, y = y), color = "blue", size = 4) +
+  # Linear regression line with cubic polynomial and confidence interval
+  geom_smooth(data = scatter_data, aes(x = x, y = y), method = "lm", formula = y ~ poly(x, 3), se = TRUE, color = "blue") +
+  # Boxplots for Height Difference centered on scatter points, scaled to match left y-axis
+  geom_boxplot(data = boxplot_data, aes(x = rounded_height, y = Height_Difference * scaling_factor, group = factor(rounded_height)), 
+               width = 0.3, color = "red", alpha = 0.5, position = position_dodge(width = 0.0)) +
+  # Set axis labels and title
+  labs(x = "Pre-Bird Height (meters)", y = "Alarm Percentage (%)") +
+  theme_minimal() +
+  scale_y_continuous(
+    limits = c(0, 60),
+    sec.axis = sec_axis(~ . / scaling_factor - 10, name = "Predator Height Difference (meters)", breaks = seq(-10, 10, 5), labels = seq(-10, 10, 5))
+  ) +
+  scale_x_continuous(
+    breaks = unique_pre_heights,  # Ensures every height on the x-axis is labeled
+    labels = unique_pre_heights
+  ) +
+  theme(
+    axis.title.y.left = element_text(color = "blue"),
+    axis.title.y.right = element_text(color = "red")
+  )
+
+# Display the plot
+print(p)
+
+
+```
+
+```{r}
+# Assuming your data is stored in the 'hwk_data' dataframe
+df <- hwk_data  
+
+# Filter the data for rows where hwk is equal to 1 and drop NA values in relevant columns
+hwk1_data <- df %>% 
+  filter(hwk == 1) %>%
+  drop_na(Pre_Bird_Height, Flight_apex, Audio_React)
+
+# Calculate the height difference between Flight_apex and Pre_Bird_Height
+hwk1_data <- hwk1_data %>% mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+
+# Subset for Pre_Bird_Height <= 15
+hwk_less15 <- subset(hwk1_data, Pre_Bird_Height <= 15)
+
+# Create a summary for alarm percentage
+alarm_summary <- hwk_less15 %>%
+  group_by(rounded_height = round(Pre_Bird_Height)) %>%
+  summarise(
+    total_count = n(),
+    alarm_count = sum(Audio_React == "a"),
+    alarm_percentage = (alarm_count / total_count) * 100
+  )
+
+# Scatter plot data
+scatter_data <- alarm_summary %>%
+  select(rounded_height, alarm_percentage) %>%
+  rename(x = rounded_height, y = alarm_percentage)
+
+# Boxplot data for Flight_Apex (grouped by rounded Pre_Bird_Height)
+boxplot_data <- hwk_less15 %>%
+  mutate(rounded_height = round(Pre_Bird_Height)) %>%
+  select(rounded_height, Height_Difference)
+
+# Define the scaling factor for the right y-axis to stretch it across the same space as the left axis
+scaling_factor <- 60 / 20  # Left axis range (60) / Right axis range (20)
+
+# Create the plot
+p <- ggplot() +
+  # Scatter plot for alarm percentage
+  geom_point(data = scatter_data, aes(x = x, y = y), color = "blue", size = 4) +
+  # Linear regression line with cubic polynomial and confidence interval
+  geom_smooth(data = scatter_data, aes(x = x, y = y), method = "lm", formula = y ~ poly(x, 3), se = TRUE, color = "blue") +
+  # Boxplots for Height Difference centered on scatter points, scaled to match left y-axis
+  geom_boxplot(data = boxplot_data, aes(x = rounded_height, y = (Height_Difference + 10) * scaling_factor, group = factor(rounded_height)), 
+               width = 0.3, color = "red", alpha = 0.5, position = position_dodge(width = 0.0)) +
+  # Set axis labels and title
+  labs(x = "Pre-Bird Height (meters)", y = "Alarm Percentage (%)") +
+  theme_minimal() +
+  scale_y_continuous(
+    limits = c(0, 60),
+    sec.axis = sec_axis(~ . / scaling_factor - 10, name = "Predator Height Difference (meters)", breaks = seq(-10, 10, 5), labels = seq(-10, 10, 5))
+  ) +
+  scale_x_continuous(
+    breaks = unique_pre_heights,  # Ensures every height on the x-axis is labeled
+    labels = unique_pre_heights
   ) +
   theme(
     axis.title.y.left = element_text(color = "blue"),
@@ -800,6 +952,7 @@ hwk1_data <- hwk_data %>% filter(hwk == 1) %>% drop_na(Pre_Bird_Height, Flight_a
 
 # Calculate the height difference between Flight_apex and Pre_Bird_Height
 hwk1_data <- hwk1_data %>% mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+str(hwk1_data)
 
 # Calculate unique Pre_Bird_Height values
 unique_pre_heights <- unique(round(hwk1_data$Pre_Bird_Height))
@@ -824,6 +977,25 @@ p <- ggplot() +
 # Display the plot
 print(p)
 
+
+```
+
+```{r}
+# Filter the data for rows where hwk is equal to 1 and remove NAs from Pre_Bird_Height and Flight_apex
+hwk1_data <- hwk_data %>% filter(hwk == 1, alarm == 1) %>% drop_na(Pre_Bird_Height, Flight_apex)
+
+# Calculate the height difference between Flight_apex and Pre_Bird_Height
+hwk1_data <- hwk1_data %>% mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+
+# Create the boxplot of Height_Difference against rounded Pre_Bird_Height
+p <- ggplot(hwk1_data, aes(x = round(Pre_Bird_Height), y = Height_Difference)) +
+  geom_boxplot(aes(group = round(Pre_Bird_Height)), color = "red", alpha = 0.5, width = 0.3) +
+  labs(x = "Pre_Bird_Height", y = "Height Difference (Pre_Bird_Height - Flight_apex)",
+       title = "Height Difference Boxplots for Alarm Calls") +
+  theme_minimal()
+
+# Display the plot
+print(p)
 
 ```
 
@@ -1246,6 +1418,228 @@ for (species in species_list) {
 
 ```
 
+## Network Map
+
+```{r}
+library(igraph)
+library(dplyr)
+library(tidyr)
+
+# Select the dataframe
+data <- hwk_data
+
+# Convert "na" strings to actual NA values
+data[data == "na"] <- NA
+
+# Remove rows where Spp is NA
+data <- data[!is.na(data$Spp), ]
+
+# Group by Timestamp and create pairs of species
+edges <- data %>%
+  group_by(Timestamp) %>%
+  summarise(pairs = if(n() > 1) list(combn(Spp, 2, simplify = FALSE)) else list(list(c(Spp[1], Spp[1])))) %>%
+  unnest(pairs) %>%
+  separate(pairs, into = c("from", "to"), sep = ",") %>%
+  mutate(from = str_trim(from), to = str_trim(to))
+
+# Ensure the nodes are labeled by species only
+species <- unique(c(edges$from, edges$to))
+
+# Create an igraph object using the edges
+g <- graph_from_data_frame(edges, directed = FALSE)
+
+# Define node colors based on the alarm column
+alarm_levels <- unique(data$alarm)
+n_colors <- length(alarm_levels)
+palette <- sample(colors(), n_colors)  # Generate random colors for alarms
+
+# Create node colors dataframe
+node_colors <- data.frame(Spp = species,
+                          color = palette[match(data$alarm[match(species, data$Spp)], alarm_levels)])
+
+# Plot the network function with adjustable node spacing
+plot_network <- function(g, node_colors, spacing = 2) {
+  layout <- layout_with_fr(g, niter = 500, grid = "auto") * spacing  # Adjust the spacing with the multiplier
+
+  plot(g, 
+       layout = layout,
+       vertex.color = node_colors$color[match(V(g)$species, node_colors$Spp)],
+       vertex.label = V(g)$species,  # Label nodes with species names only
+       vertex.label.color = "black",
+       vertex.label.cex = 1.2,  # Increase label size
+       vertex.label.font = 1,   # Bold font
+       vertex.size = 1,
+       edge.color = "gray",
+       vertex.label.dist = 0.9) # Offset labels from points
+  
+  # Add legend for alarm levels
+  legend("bottomright", legend = alarm_levels, fill = palette, title = "Alarm Levels")
+}
+
+# Plot the network with adjustable spacing
+plot_network(g, node_colors, spacing = 5)  # Adjust spacing as needed
+
+```
+
+```{r}
+library(igraph)
+library(dplyr)
+library(tidyr)
+
+# Select the dataframe
+data <- hwk_data
+
+# Convert "na" strings to actual NA values
+data[data == "na"] <- NA
+
+# Remove rows where Spp is NA
+data <- data[!is.na(data$Spp), ]
+
+# Group by Timestamp and create pairs of species
+edges <- data %>%
+  group_by(Timestamp) %>%
+  summarise(pairs = if(n() > 1) list(combn(Spp, 2, simplify = FALSE)) else list(list(c(Spp[1], Spp[1])))) %>%
+  unnest(pairs) %>%
+  mutate(from = sapply(pairs, `[`, 1),
+         to = sapply(pairs, `[`, 2)) %>%
+  select(from, to) %>%
+  distinct()
+
+# Ensure the nodes are labeled by species only
+species <- unique(c(edges$from, edges$to))
+
+# Create an igraph object using the edges
+g <- graph_from_data_frame(edges, directed = FALSE, vertices = data.frame(name = species))
+
+# Define node colors based on the alarm column
+alarm_levels <- unique(data$alarm)
+n_colors <- length(alarm_levels)
+palette <- sample(colors(), n_colors)  # Generate random colors for alarms
+
+# Create node colors dataframe
+node_colors <- data.frame(Spp = species,
+                          color = palette[match(data$alarm[match(species, data$Spp)], alarm_levels)])
+
+# Plot the network function with adjustable node spacing
+plot_network <- function(g, node_colors, spacing = 2) {  # Increase spacing for better visibility
+  layout <- layout_with_fr(g, niter = 500) * spacing  # Adjust the spacing with the multiplier
+
+  plot(g, 
+       layout = layout,
+       vertex.color = node_colors$color[match(V(g)$name, node_colors$Spp)],
+       vertex.label = V(g)$name,  # Label nodes with species names only
+       vertex.label.color = "black",
+       vertex.label.cex = 1.2,  # Increase label size
+       vertex.label.font = 2,   # Bold font
+       vertex.size = 5,
+       edge.color = "gray",
+       vertex.label.dist = 1,   # Offset labels from points
+       vertex.label.degree = -pi/4)  # Rotate labels slightly for better spacing
+  
+  # Add legend for alarm levels
+  legend("bottomright", legend = alarm_levels, fill = palette, title = "Alarm Levels")
+}
+
+# Plot the network with adjustable spacing
+plot_network(g, node_colors, spacing = 25)  # Adjust spacing as needed
+
+```
+
+\
+\
+
+```{r}
+library(igraph)
+library(dplyr)
+library(tidyr)
+
+# Select the dataframe
+data <- hwk_data
+
+# Convert "na" strings to actual NA values
+data[data == "na"] <- NA
+
+# Remove rows where Spp is NA
+data <- data[!is.na(data$Spp), ]
+
+# Group by Timestamp and create pairs of species
+edges <- data %>%
+  group_by(Timestamp) %>%
+  summarise(pairs = if(n() > 1) list(combn(Spp, 2, simplify = FALSE)) else list(list(c(Spp[1], Spp[1])))) %>%
+  unnest(pairs) %>%
+  mutate(from = sapply(pairs, `[`, 1),
+         to = sapply(pairs, `[`, 2)) %>%
+  select(from, to) %>%
+  distinct()
+
+# Count the number of edges between each pair of nodes
+edge_weights <- edges %>%
+  count(from, to, name = "weight")
+
+# Ensure the nodes are labeled by species only
+species <- unique(c(edge_weights$from, edge_weights$to))
+
+# Create an igraph object using the edges
+g <- graph_from_data_frame(edge_weights, directed = FALSE, vertices = data.frame(name = species))
+
+# Define node colors based on the alarm column
+alarm_levels <- unique(data$alarm)
+n_colors <- length(alarm_levels)
+palette <- sample(colors(), n_colors)  # Generate random colors for alarms
+
+# Create a mapping of species to their alarm levels
+species_alarm <- data %>%
+  select(Spp, alarm) %>%
+  distinct() %>%
+  filter(Spp %in% species)
+
+# Create node colors dataframe
+node_colors <- species_alarm %>%
+  mutate(color = palette[match(alarm, alarm_levels)]) %>%
+  select(Spp, color)
+
+# Ensure all species are included in the node_colors dataframe
+node_colors_full <- data.frame(Spp = species)
+node_colors_full <- merge(node_colors_full, node_colors, by = "Spp", all.x = TRUE)
+
+# Fill in missing colors with a default color (if any species didn't have an alarm level)
+default_color <- "lightgray"
+node_colors_full$color[is.na(node_colors_full$color)] <- default_color
+
+# Plot the network function with adjustable node spacing and edge thickness
+plot_network <- function(g, node_colors, edge_weights, spacing = 100) {  # Adjust spacing for better visibility
+  layout <- layout_with_fr(g, niter = 1000) * spacing  # Adjust the spacing with the multiplier
+
+  # Save the plot to a large PDF file
+  pdf("large_network_plot.pdf", width = 20, height = 20)  # Adjust width and height for size
+
+  plot(g, 
+       layout = layout,
+       vertex.color = node_colors$color[match(V(g)$name, node_colors$Spp)],
+       vertex.label = V(g)$name,  # Label nodes with species names only
+       vertex.label.color = "black",
+       vertex.label.cex = 1,  # Adjust label size
+       vertex.label.font = 2,   # Bold font
+       vertex.size = 3,  # Adjust node size
+       edge.color = "gray",
+       edge.width = edge_weights$weight / max(edge_weights$weight) * 5,  # Adjust edge thickness
+       vertex.label.dist = 0,   # Offset labels from points
+       vertex.label.degree = -pi/4)  # Rotate labels slightly for better spacing
+  
+  # Add legend for alarm levels
+  legend("bottomright", legend = alarm_levels, fill = palette, title = "Alarm Levels")
+  
+  dev.off()  # Close the PDF device
+}
+
+# Plot the network with adjustable spacing
+plot_network(g, node_colors_full, edge_weights, spacing = 2)  # Adjust spacing as needed
+
+
+
+
+```
+
 ## Density 10 Meter Intervals
 
 ```{r}
@@ -1341,9 +1735,28 @@ print(dense_df)
 head(dense_df)
 ```
 
-## GLM Permutations
+# GLM
+
+## Load GLM Data
 
 ```{r}
+
+# Loading Reduced GLM Data
+HwkGLM <- read_csv(here("data/HwkGLM.csv"))
+str(HwkGLM)
+
+# Assigning Appropriat Data Types
+df <- HwkGLM %>%
+  mutate(across(c(col1, col6, col12), as.factor)) %>% # Convert multiple columns to factors
+  mutate(across(c(col1, col6, col12), as.integer)) %>% # Convert multiple columns to integer
+  mutate(across(c(col1, col6, col12), as.factor)) %>% 
+  mutate(across(c(col1, col6, col12), as.factor)) %>% 
+```
+
+## Permutations
+
+```{r}
+
 
 # load data
 glm_df <- dense_df
