@@ -70,10 +70,58 @@ ggplot(plot_data, aes(x = Group, y = Percentage, fill = Group)) +
   theme(axis.text.x = element_text(angle = 330, vjust = .5, hjust = 0)) +
   scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 50))
 
-dggsave(here("figs/Alarm_Sociality_Individuals.png"))
+ggsave(here("figs/Alarm_Sociality_Individuals.png"))
 ```
 
 ## Alarm Social Group Flock Level
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+# Subsetting for only treatment
+hwk_subset <- subset(hwk_data, hwk == 1)
+
+# Check if hwk_subset has valid data
+if (nrow(hwk_subset) == 0) {
+  stop("No data available in hwk_subset.")
+}
+
+# Calculate percentages and sample sizes by SocialGroup
+plot_data <- hwk_subset %>%
+  group_by(SocialGroup) %>%
+  summarise(
+    Percentage = mean(alarm, na.rm = TRUE) * 100,
+    SampleSize = n(),
+    .groups = 'drop'  # This avoids warning about grouping structure
+  ) %>%
+  mutate(Group = recode(SocialGroup,
+                        solo = "Solo",
+                        pair = "Pair",
+                        ssf = "Single-species Flock",
+                        msf = "Mixed-species Flock",
+                        ant = "Ant Flock",
+                        lek = "Competitive Flock")) 
+
+# Check the structure of plot_data
+print(plot_data)
+
+# Create a bar plot
+ggplot(plot_data, aes(x = Group, y = Percentage, fill = Group)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = paste("n =", SampleSize)), 
+            position = position_dodge(width = 0.9), vjust = -0.5) +
+  labs(title = "Percentage of Alarm Call Reactions by Sociality Across Group Types",
+       y = "Alarm Percentage",
+       x = "Social Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 330, vjust = .5, hjust = 0)) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 50))
+
+
+```
 
 ```{r}
 #subsetting for only treatment
@@ -1892,7 +1940,7 @@ summary(glm_predator)
 
 ```{r}
 
-glm_social1 <- glm(Alarm_Presence ~ SocialGroup + abundance + richness, data = cleaned_df, family = binomial(link = "logit"))
+glm_social1 <- glm(Alarm_Presence ~ SocialGroup, data = cleaned_df, family = binomial(link = "logit"))
 summary(glm_social1)
 ```
 
@@ -1904,6 +1952,17 @@ glm_social2 <- glm(Alarm_Presence ~ SocialGroup + abundance + richness, data = c
 summary(glm_social2)
 ```
 
+### GLM Veg
+
+```{r}
+
+glm_veg_all <- glm(Alarm_Presence ~ Bird_Dense_Avg + Veg_Under_Avg + Veg_under_height + Veg_mid_low + Veg_mid_high + Rad_10_Avg, data = df_filtered, family = binomial(link = "logit"))
+summary(glm_veg_all)
+
+glm_dense <- glm(Alarm_Presence ~ Pre_Bird_Height + Bird_Dense_Avg + Veg_mid_low + Rad_10_Avg, data = df_filtered, family = binomial(link = "logit"))
+summary(glm_dense)
+```
+
 ## Remove Unwanted Variables For Permutations
 
 ```{r}
@@ -1913,6 +1972,12 @@ unwanted_columns <- c("Index",
                       "Timestamp",
                       "lat",
                       "long",
+                      "Obs1_bird_dist",
+                      "Shoot_bird_dist",
+                      "TarSpp",
+                      "Alarm_Spp",
+                      "Tar_Sex",
+                      "Forage_Tree_height",
                       "Target",
                       "Scientific",
                       "BirdTree",
@@ -1924,11 +1989,17 @@ unwanted_columns <- c("Index",
                       "Audio_React",
                       "Veg_dense_under",
                       "Pre_Bird_Dense",
+                      "Pre_Vocal",
+                      "Pre_Behav",
+                      "Mid_Vocal",
                       "Mid_Behav",
                       "Post_Vocal",
                       "Post_Behav",
                       "Freeze_Time_sec",
+                      "Post_Dist",
                       "Post_Bird_Dense",
+                      "Veg_can_low",
+                      "Veg_can_high",
                       "Rad_01",
                       "Rad_02",
                       "Rad_03",
@@ -1944,15 +2015,201 @@ unwanted_columns <- c("Index",
                       )
 
 # Remove unwanted columns using [ ] notation
-df_subset <- cleaned_df[, !names(cleaned_df) %in% unwanted_columns]
+df_filtered <- cleaned_df[, !names(cleaned_df) %in% unwanted_columns]
 
 # Replace "#N/A" with NA in the Social_Index column
-df_subset$SocialGroup[df_subset$SocialGroup == "#N/A"] <- NA
-str(df_subset)
-view(df_subset)
+df_filtered$SocialGroup[df_subset$SocialGroup == "#N/A"] <- NA
+str(df_filtered)
+view(df_filtered)
+```
+
+## LASSO
+
+```{r}
+# Load necessary library
+library(glmnet)
+
+# Remove rows with NA values from the dataset
+df_filtered <- na.omit(df_filtered)
+
+# Prepare the data
+X <- model.matrix(Alarm_Presence ~ . - 1, data = df_filtered)
+y <- df_filtered$Alarm_Presence
+
+# Run LASSO (alpha = 1 for LASSO)
+lasso_model <- cv.glmnet(X, y, family = "binomial", alpha = 1)
+
+# Get the best lambda (penalty term)
+best_lambda <- lasso_model$lambda.min
+
+# Coefficients of the best model
+lasso_coefs <- coef(lasso_model, s = best_lambda)
+
+# Print the coefficients
+print(lasso_coefs)
+
+```
+
+```{r}
+
+library(glmnet)
+
+# Remove rows with NA values from the dataset
+df_filtered <- na.omit(df_filtered)
+str(df_filtered)
+
+# Prepare the data
+X <- model.matrix(Alarm_Presence ~ . - 1, data = df_filtered)
+y <- df_filtered$Alarm_Presence
+
+# Run LASSO (alpha = 1 for LASSO)
+lasso_model <- cv.glmnet(X, y, family = "binomial", alpha = 1)
+
+# Get the best lambda (penalty term)
+best_lambda <- lasso_model$lambda.min
+
+# Coefficients of the best model
+coef(lasso_model, s = best_lambda)
+
+```
+
+## GLM Based on LASSO
+
+```{r}
+
+glm_lasso <- glm(Alarm_Presence ~ SocialGroup + Alarm_Qty + Pre_Vocal + Pre_Behav, data = df_filtered, family = binomial(link = "logit"))
+summary(glm_lasso)
+```
+
+## Stepwise GLM
+
+```{r}
+library(car)
+
+# Check for aliased coefficients
+alias(full_model)
+
+# Calculate VIF for the full model
+vif_values <- vif(full_model)
+print(vif_values)
+
+# Identify variables with high VIF (generally above 5 or 10)
+high_vif_vars <- names(vif_values[vif_values > 5])
+print(high_vif_vars)
+
+# Consider removing or combining variables with high VIF
+
+```
+
+```{r}
+
+# Check for factors with less than two levels
+low_level_factors <- sapply(df_filtered, function(x) is.factor(x) && nlevels(x) < 2)
+
+# Print the variables with less than two levels
+print(names(low_level_factors[low_level_factors]))
+
+# Remove low-level factors from the dataset
+df_filtered <- df_filtered[, !low_level_factors]
+
+# Convert character columns to factors
+df_filtered <- df_filtered %>%
+  mutate(across(where(is.character), as.factor))
+
+# Remove columns that are completely NA
+df_filtered <- df_filtered[, colSums(is.na(df_filtered)) != nrow(df_filtered)]
+
+df_filtered <- na.omit(df_filtered)
+
+# Print the structure to verify changes
+str(df_filtered)
+
+# Run a full GLM model with all variables
+full_model <- glm(Alarm_Presence ~ ., data = df_filtered, family = binomial(link = "logit"))
+
+# Stepwise model selection based on AIC
+stepwise_model <- stepAIC(full_model, direction = "both")
+
+# Check the final selected model
+summary(stepwise_model)
+
+```
+
+```{r}
+
+glm_step_best <- glm(Alarm_Presence ~ Alarm_Qty + Alarm_Conspecific, data = df_filtered, family = binomial(link = "logit"))
+vif(glm_step_best)
+
+summary(df_filtered$Alarm_Qty)
+table(df_filtered$Alarm_Qty)
+
+```
+
+```{r}
+
+library(pscl)
+zero_inflated_model <- zeroinfl(Alarm_Presence ~ SocialGroup | Alarm_Qty, data = df_filtered, dist = "poisson")
+summary(zero_inflated_model)
+
+```
+
+```{r}
+# Check for variables with only one unique value
+single_level_vars <- sapply(df_filtered, function(x) length(unique(na.omit(x))) == 1)
+
+# Print the variables with only one level
+print(names(single_level_vars[single_level_vars]))
+
+# Remove variables with only one level from the dataset
+df_filtered <- df_filtered[, !single_level_vars]
+
+# Convert character columns to factors
+df_filtered <- df_filtered %>%
+  mutate(across(where(is.character), as.factor))
+
+# Remove columns that are completely NA
+df_filtered <- df_filtered[, colSums(is.na(df_filtered)) != nrow(df_filtered)]
+
+library(MASS)
+
+# Run a full GLM model with all variables
+full_model <- glm(Alarm_Presence ~ ., data = df_subset, family = binomial(link = "logit"))
+
+# Stepwise model selection based on AIC
+stepwise_model <- stepAIC(full_model, direction = "both")
+
+# Check the final selected model
+summary(stepwise_model)
+```
+
+```{r}
+# Convert character columns to factors
+df_filtered <- df_filtered %>%
+  mutate(across(where(is.character), as.factor))
+
+# Remove columns that are completely NA
+df_filtered <- df_filtered[, colSums(is.na(df_filtered)) != nrow(df_filtered)]
+
+
+```
+
+```{r}
+library(MASS)
+
+# Run a full GLM model with all variables
+full_model <- glm(Alarm_Presence ~ ., data = df_subset, family = binomial(link = "logit"))
+
+# Stepwise model selection based on AIC
+stepwise_model <- stepAIC(full_model, direction = "both")
+
+# Check the final selected model
+summary(stepwise_model)
+
 ```
 
 ## Permutations Script
+
+MUCH MUCH MUCH TOO BIG. Apparently 4.3 Billion combinations...
 
 ```{r}
 
