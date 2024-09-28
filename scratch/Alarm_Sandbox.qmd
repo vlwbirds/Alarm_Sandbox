@@ -1745,29 +1745,252 @@ head(dense_df)
 HwkGLM <- read_csv(here("data/HwkGLM.csv"))
 str(HwkGLM)
 
-# Assigning Appropriat Data Types
-df <- HwkGLM %>%
-  mutate(across(c(col1, col6, col12), as.factor)) %>% # Convert multiple columns to factors
-  mutate(across(c(col1, col6, col12), as.integer)) %>% # Convert multiple columns to integer
-  mutate(across(c(col1, col6, col12), as.factor)) %>% 
-  mutate(across(c(col1, col6, col12), as.factor)) %>% 
+
+  
 ```
 
-## Permutations
+## Assign Vector Type
+
+```{r}
+
+# Assigning Appropriat Data Types
+df <- HwkGLM %>%
+  mutate(across(c("Habitat_Primary",
+                  "Habitat_Under_Dom1", 
+                  "Habitat_Under_Dom2", 
+                  "SocialGroup", 
+                  "TarSpp",
+                  "Alarm_Spp",
+                  "Alarm_Sex",
+                  "Tar_Sex",
+                  "Audio_React",
+                  "Pre_Vocal",
+                  "Mid_Vocal",
+                  "Pre_Behav"
+                  ), as.factor)) %>% # Convert multiple columns to factors
+  mutate(across(c("Obs1_bird_dist",
+                  "Shoot_bird_dist",
+                  "Alarm_Presence",
+                  "Alarm_Qty",
+                  "Alarm_Conspecific",
+                  "abundance",
+                  "richness",
+                  "Proximity",
+                  "Flight_dist",
+                  "Flight_apex",
+                  "Flight_proximity",
+                  "Pre_Bird_Height",
+                  "Bird_Dense_Avg",
+                  "Post_Dist",
+                  "Post_Bird_Height",
+                  "Post_Dense_Avg",
+                  "Veg_under_height",
+                  "Veg_mid_low",
+                  "Veg_mid_high",
+                  "Veg_can_low",
+                  "Veg_can_high",
+                  "Rad_10_Avg",
+                  "Veg_Under_Avg",
+                  "Forage_Tree_height"
+                  ), as.numeric)) # Convert multiple columns to numeric
+
+str(df)
+```
+
+## 
+
+## Remove NA
+
+I'm not sure if this is needed actually
+
+```{r}
+
+# Function to replace values with NA in factor columns and drop unused levels
+replace_with_na_in_factors <- function(df, replace_values) {
+  # Iterate over each column
+  df[] <- lapply(df, function(column) {
+    if (is.factor(column)) {
+      # Convert factor to character
+      column <- as.character(column)
+    }
+    # Replace unwanted values with NA
+    column[column %in% replace_values] <- NA
+    # Optionally convert back to factor (dropping unused levels)
+    return(factor(column))
+  })
+  return(df)
+}
+
+# Replace values in the specific columns you mentioned
+replace_values <- c("NA", "na", "#N/A", "", "_")
+
+# Apply the replacement function to the dataframe
+df <- replace_with_na_in_factors(df, replace_values)
+
+# View the structure of the updated dataframe
+str(df)
+
+glm_na <- na.omit(df)
+str(glm_na)
+```
+
+## Add Data Relationships and Interactions
+
+```{r}
+
+# Create the new column by calculating the difference
+glm_height <- df %>%
+  mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+
+# View the structure of the updated dataframe
+str(glm_height)
+
+
+
+
+# Function to clean a specific column
+clean_column_in_df <- function(data, column_name, remove_values) {
+  # Convert the column to character (to handle mixed types)
+  data[[column_name]] <- as.character(data[[column_name]])
+  
+  # Remove rows with specific values or NA in the specified column
+  cleaned_data <- data[!is.na(data[[column_name]]) & !data[[column_name]] %in% remove_values, ]
+  
+  # Convert the cleaned column back to numeric (if applicable)
+  cleaned_data[[column_name]] <- suppressWarnings(as.factor(cleaned_data[[column_name]]))
+  
+  return(cleaned_data)
+}
+
+# Define the values you want to remove (e.g., "a", "b", "c")
+remove_values <- c("lek")
+
+# Clean the 'values' column, retaining all other columns
+cleaned_df <- clean_column_in_df(glm_height, "SocialGroup", remove_values)
+
+# View the cleaned data frame
+str(cleaned_df)
+```
+
+### GLM Predator
+
+```{r}
+
+glm_predator <- glm(Alarm_Presence ~ 
+                      SocialGroup + 
+                      Pre_Bird_Height + 
+                      Flight_dist + 
+                      Height_Difference + 
+                      Flight_proximity + 
+                      Height_Difference * Flight_proximity + 
+                      Pre_Bird_Height * Height_Difference * Flight_proximity
+                      , data = cleaned_df, family = binomial(link = "logit"))
+summary(glm_predator)
+```
+
+### GLM Social Group
+
+```{r}
+
+glm_social1 <- glm(Alarm_Presence ~ SocialGroup + abundance + richness, data = cleaned_df, family = binomial(link = "logit"))
+summary(glm_social1)
+```
+
+### GLM Social Factors
+
+```{r}
+
+glm_social2 <- glm(Alarm_Presence ~ SocialGroup + abundance + richness, data = cleaned_df, family = binomial(link = "logit"))
+summary(glm_social2)
+```
+
+## Remove Unwanted Variables For Permutations
+
+```{r}
+
+# Columns to remove
+unwanted_columns <- c("Index",
+                      "Timestamp",
+                      "lat",
+                      "long",
+                      "Target",
+                      "Scientific",
+                      "BirdTree",
+                      "Habitat_Primary",
+                      "Habitat_Under_Dom1",
+                      "Habitat_Under_Dom2",
+                      "Angle",
+                      "Proximity",
+                      "Audio_React",
+                      "Veg_dense_under",
+                      "Pre_Bird_Dense",
+                      "Mid_Behav",
+                      "Post_Vocal",
+                      "Post_Behav",
+                      "Freeze_Time_sec",
+                      "Post_Bird_Dense",
+                      "Rad_01",
+                      "Rad_02",
+                      "Rad_03",
+                      "Rad_04",
+                      "Rad_05",
+                      "Rad_06",
+                      "Rad_07",
+                      "Rad_08",
+                      "Rad_09",
+                      "Rad_10",
+                      "flock",
+                      "alarm"
+                      )
+
+# Remove unwanted columns using [ ] notation
+df_subset <- cleaned_df[, !names(cleaned_df) %in% unwanted_columns]
+
+# Replace "#N/A" with NA in the Social_Index column
+df_subset$SocialGroup[df_subset$SocialGroup == "#N/A"] <- NA
+str(df_subset)
+view(df_subset)
+```
+
+## Permutations Script
 
 ```{r}
 
 
-# load data
-glm_df <- dense_df
-
-# filter na and hwk
-glm_hwk <- glm_df[df$hwk == 1,]
-glm_dense_na <- glm_hwk %>% drop_na(Density_At_Pre_Height)
-
 # List of independent variables (ensure there are no leading or trailing spaces)
-independent_vars <- c("Spp", "Sex", "Flock_size", "Social_Index", "Flight_proximity", 
-"Pre_Height", "Veg_dense_under_avg", "Veg_under_height", "Pre_Dense", "Pre_Height", "Veg_dense_under_avg", "Veg_under_height", "Pre_Dense", "Veg_mid_low", "Veg_mid_high","Rad_Avg_Dense")
+independent_vars <- c("Obs1_bird_dist",
+                      "Shoot_bird_dist",
+                      "SocialGroup",
+                      "TarSpp",
+                      "Alarm_Presence",
+                      "Alarm_Qty",
+                      "Alarm_Spp",
+                      "Alarm_Sex",
+                      "Alarm_Conspecific",
+                      "abundance",
+                      "richness",
+                      "Tar_Sex",
+                      "Flight_dist",
+                      "Flight_apex",
+                      "Flight_proximity",
+                      "Pre_Bird_Height",
+                      "Forage_Tree_height",
+                      "Veg_Under_Avg",
+                      "Veg_under_height",
+                      "Bird_Dense_Avg",
+                      "Pre_Vocal",
+                      "Pre_Behav",
+                      "Mid_Vocal",
+                      "Post_Dist",
+                      "Post_Bird_Height",
+                      "Post_Dense_Avg",
+                      "Veg_mid_low",
+                      "Veg_mid_high",
+                      "Veg_can_low",
+                      "Veg_can_high",
+                      "Rad_10_avg",
+                      "Height_Difference"
+                      )
 
 # List to store model outputs
 model_outputs <- list()
@@ -1780,7 +2003,7 @@ all_combinations <- unlist(all_combinations, recursive = FALSE)
 
 # Run GLM models for each combination
 for (vars in all_combinations) {
-  formula_string <- paste("Alarm ~", paste(vars, collapse = " + "))
+  formula_string <- paste("Alarm_Presence ~", paste(vars, collapse = " + "))
   model <- glm(as.formula(formula_string), data = df_filtered, family = binomial(link = "logit"))
   # Extract AIC and other model output
   model_output <- broom::tidy(model)
