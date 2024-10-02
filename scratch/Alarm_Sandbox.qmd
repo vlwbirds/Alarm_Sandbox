@@ -76,54 +76,6 @@ ggsave(here("figs/Alarm_Sociality_Individuals.png"))
 ## Alarm Social Group Flock Level
 
 ```{r}
-# Load necessary libraries
-library(dplyr)
-library(ggplot2)
-library(scales)
-
-# Subsetting for only treatment
-hwk_subset <- subset(hwk_data, hwk == 1)
-
-# Check if hwk_subset has valid data
-if (nrow(hwk_subset) == 0) {
-  stop("No data available in hwk_subset.")
-}
-
-# Calculate percentages and sample sizes by SocialGroup
-plot_data <- hwk_subset %>%
-  group_by(SocialGroup) %>%
-  summarise(
-    Percentage = mean(alarm, na.rm = TRUE) * 100,
-    SampleSize = n(),
-    .groups = 'drop'  # This avoids warning about grouping structure
-  ) %>%
-  mutate(Group = recode(SocialGroup,
-                        solo = "Solo",
-                        pair = "Pair",
-                        ssf = "Single-species Flock",
-                        msf = "Mixed-species Flock",
-                        ant = "Ant Flock",
-                        lek = "Competitive Flock")) 
-
-# Check the structure of plot_data
-print(plot_data)
-
-# Create a bar plot
-ggplot(plot_data, aes(x = Group, y = Percentage, fill = Group)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  geom_text(aes(label = paste("n =", SampleSize)), 
-            position = position_dodge(width = 0.9), vjust = -0.5) +
-  labs(title = "Percentage of Alarm Call Reactions by Sociality Across Group Types",
-       y = "Alarm Percentage",
-       x = "Social Group") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 330, vjust = .5, hjust = 0)) +
-  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 50))
-
-
-```
-
-```{r}
 #subsetting for only treatment
 hwk_subset <- subset(social_alarm, hwk == 1)
 view(hwk_subset)
@@ -214,18 +166,18 @@ p +
   stat_smooth(method = "lm", formula = y ~ poly(x, 3))
 
 # polynomial lines
-#fit1 <- lm(Percentage~Pre_Height, data=plot_data)
-#fit2 <- lm(Percentage~poly(Pre_Height,2,raw=TRUE), data=plot_data)
-#fit3 <- lm(Percentage~poly(Pre_Height,3,raw=TRUE), data=plot_data)
-#fit4 <- lm(Percentage~poly(Pre_Height,4,raw=TRUE), data=plot_data)
-#fit5 <- lm(Percentage~poly(Pre_Height,5,raw=TRUE), data=plot_data)
+fit1 <- lm(Percentage~Pre_Height, data=plot_data)
+fit2 <- lm(Percentage~poly(Pre_Height,2,raw=TRUE), data=plot_data)
+fit3 <- lm(Percentage~poly(Pre_Height,3,raw=TRUE), data=plot_data)
+fit4 <- lm(Percentage~poly(Pre_Height,4,raw=TRUE), data=plot_data)
+fit5 <- lm(Percentage~poly(Pre_Height,5,raw=TRUE), data=plot_data)
 
 #calculated adjusted R-squared of each model
-#summary(fit1)$adj.r.squared
-#summary(fit2)$adj.r.squared
-#summary(fit3)$adj.r.squared
-#summary(fit4)$adj.r.squared
-#summary(fit5)$adj.r.squared
+summary(fit1)$adj.r.squared
+summary(fit2)$adj.r.squared
+summary(fit3)$adj.r.squared
+summary(fit4)$adj.r.squared
+summary(fit5)$adj.r.squared
 ```
 
 ## Alarm Height and Predator Height
@@ -784,7 +736,286 @@ grid.arrange(p1, p2, ncol = 1, heights = c(2/3, 1/3))
 
 ```
 
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+
+# Assuming your data is stored in the 'hwk_data' dataframe
+df <- hwk_data  
+
+# Filter the data for rows where hwk is equal to 1 and drop NA values in relevant columns
+hwk1_data <- df %>% 
+  filter(hwk == 1) %>%
+  drop_na(Pre_Bird_Height, Flight_apex, Audio_React)
+
+# Subset for Pre_Bird_Height <= 15
+hwk_less15 <- subset(hwk1_data, Pre_Bird_Height <= 15)
+
+# Calculate the unique integer "Pre_Bird_Height" values
+unique_pre_heights <- unique(round(hwk_less15$Pre_Bird_Height))
+
+# Create a summary for alarm percentage
+alarm_summary <- hwk_less15 %>%
+  group_by(rounded_height = round(Pre_Bird_Height)) %>%
+  summarise(
+    total_count = n(),
+    alarm_count = sum(Audio_React == "a"),
+    alarm_percentage = (alarm_count / total_count) * 100
+  )
+
+# Check the structure of alarm_summary to make sure the columns are there
+print(str(alarm_summary))
+
+# Scatter plot data
+# Ensure that rounded_height and alarm_percentage exist in alarm_summary
+scatter_data <- alarm_summary %>%
+  select(rounded_height, alarm_percentage) %>%   # Columns should exist here
+  rename(x = rounded_height, y = alarm_percentage)
+
+# Boxplot data for Flight_apex (grouped by rounded Pre_Bird_Height)
+boxplot_data <- hwk_less15 %>%
+  mutate(rounded_height = round(Pre_Bird_Height)) %>%
+  select(rounded_height, Flight_apex)
+
+# Create the alarm percentage plot (left y-axis)
+p1 <- ggplot(scatter_data, aes(x = x, y = y)) +
+  geom_point(color = "blue", size = 4) +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 3), se = FALSE, color = "blue") +
+  scale_y_continuous(name = "Alarm Percentage (%)") +
+  scale_x_continuous(name = "Pre-Bird Height (meters)") +
+  theme_minimal()
+
+# Create the Flight_apex boxplot (right y-axis)
+p2 <- ggplot(boxplot_data, aes(x = rounded_height, y = Flight_apex)) +
+  geom_boxplot(aes(group = rounded_height), color = "red", alpha = 0.5) +
+  scale_y_continuous(name = "Flight Apex (meters)") +
+  scale_x_continuous(name = "Pre-Bird Height (meters)", position = "top") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+# Combine the two plots using gridExtra
+grid.arrange(p1, p2, ncol = 1, heights = c(2/3, 1/3))
+
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+
+# Assuming your data is stored in the 'hwk_data' dataframe
+df <- hwk_data  
+
+# Filter the data for rows where hwk is equal to 1 and drop NA values in relevant columns
+hwk1_data <- df %>% 
+  filter(hwk == 1) %>%
+  drop_na(Pre_Bird_Height, Flight_apex, Audio_React)
+
+# Subset for Pre_Bird_Height <= 15
+hwk_less15 <- subset(hwk1_data, Pre_Bird_Height <= 15)
+
+# Create a summary for alarm percentage
+alarm_summary <- hwk_less15 %>%
+  group_by(rounded_height = round(Pre_Bird_Height)) %>%
+  summarise(
+    total_count = n(),
+    alarm_count = sum(Audio_React == "a"),
+    alarm_percentage = (alarm_count / total_count) * 100
+  )
+
+# Scatter plot data
+scatter_data <- alarm_summary %>%
+  select(rounded_height, alarm_percentage) %>%   # Selecting the correct columns
+  rename(x = rounded_height, y = alarm_percentage)
+
+# Boxplot data for Flight_apex (grouped by rounded Pre_Bird_Height)
+boxplot_data <- hwk_less15 %>%
+  mutate(rounded_height = round(Pre_Bird_Height)) %>%
+  select(rounded_height, Flight_apex)
+
+# Create the alarm percentage plot (left y-axis)
+p1 <- ggplot(scatter_data, aes(x = x, y = y)) +
+  geom_point(color = "blue", size = 4) +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 3), se = FALSE, color = "blue") +
+  scale_y_continuous(name = "Alarm Percentage (%)") +
+  scale_x_continuous(name = "Pre-Bird Height (meters)") +
+  theme_minimal()
+
+# Create the Flight_apex boxplot (right y-axis)
+p2 <- ggplot(boxplot_data, aes(x = rounded_height, y = Flight_apex)) +
+  geom_boxplot(aes(group = rounded_height), color = "red", alpha = 0.5) +
+  scale_y_continuous(name = "Flight Apex (meters)") +
+  scale_x_continuous(name = "Pre-Bird Height (meters)", position = "top") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+# Combine the two plots using gridExtra
+grid.arrange(p1, p2, ncol = 1, heights = c(2/3, 1/3))
+
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+
+# Filter the data for rows where hwk is equal to 1 and drop NA values in relevant columns
+hwk1_data <- hwk_data %>% 
+  filter(hwk == 1) %>%
+  drop_na(Pre_Bird_Height, Flight_apex, Audio_React)
+
+# Subset for Pre_Bird_Height <= 15
+hwk_less15 <- hwk1_data %>%
+  filter(Pre_Bird_Height <= 15)
+
+# Create a summary for alarm percentage
+alarm_summary <- hwk_less15 %>%
+  group_by(rounded_height = round(Pre_Bird_Height)) %>%
+  summarise(
+    total_count = n(),
+    alarm_count = sum(Audio_React == "a"),
+    alarm_percentage = (alarm_count / total_count) * 100
+  )
+
+# Check the structure of the alarm_summary to ensure it's correct
+print(alarm_summary)
+
+# Instead of select(), let's just rename columns directly
+scatter_data <- alarm_summary %>%
+  rename(x = rounded_height, y = alarm_percentage)
+
+# Boxplot data for Flight_apex (grouped by rounded Pre_Bird_Height)
+boxplot_data <- hwk_less15 %>%
+  mutate(rounded_height = round(Pre_Bird_Height-Flight_apex))
+
+# Create the alarm percentage plot (left y-axis)
+p1 <- ggplot(scatter_data, aes(x = x, y = y)) +
+  geom_point(color = "blue", size = 4) +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 3), se = FALSE, color = "blue") +
+  scale_y_continuous(name = "Alarm Percentage (%)") +
+  scale_x_continuous(name = "Pre-Bird Height (meters)") +
+  theme_minimal()
+
+# Create the Flight_apex boxplot (right y-axis)
+p2 <- ggplot(boxplot_data, aes(x = rounded_height, y = Flight_apex)) +
+  geom_boxplot(aes(group = rounded_height), color = "red", alpha = 0.5) +
+  scale_y_continuous(name = "Flight Apex (meters)") +
+  scale_x_continuous(name = "Pre-Bird Height (meters)", position = "top") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+# Combine the two plots using gridExtra
+grid.arrange(p1, p2, ncol = 1, heights = c(2/3, 1/3))
+
+```
+
 ## Alarm Height and Hawk Difference
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Assuming 'hwk_data' is your dataset
+
+# Filter the data for rows where hwk is equal to 1 and remove NAs from Pre_Bird_Height and Flight_apex
+hwk1_data <- hwk_data %>% filter(hwk == 1) %>% drop_na(Pre_Bird_Height, Flight_apex)
+
+# Calculate the height difference between Flight_apex and Pre_Bird_Height
+hwk1_data <- hwk1_data %>% mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+
+# Calculate the percentage of alarms for each unique Pre_Bird_Height
+alarm_percentage <- hwk1_data %>%
+  group_by(Pre_Bird_Height = round(Pre_Bird_Height)) %>%
+  summarise(Alarm_Percentage = sum(Audio_React == "a") / n() * 100)
+
+# Create the scatter plot
+p <- ggplot() +
+  # Scatter plot of Alarm_Percentage vs. Pre_Bird_Height
+  geom_point(data = alarm_percentage, aes(x = Pre_Bird_Height, y = Alarm_Percentage), color = "blue", size = 4) +
+  
+  # Overlay horizontal boxplots of Height_Difference
+  geom_boxplot(data = hwk1_data, aes(x = round(Pre_Bird_Height), y = Height_Difference, group = round(Pre_Bird_Height)), 
+               width = 0.3, color = "red", alpha = 0.5) +
+  
+  # Add text labels for min, mean, and max of Height_Difference using stat_summary
+  stat_summary(data = hwk1_data, aes(x = round(Pre_Bird_Height), y = Height_Difference), 
+               fun.min = min, fun.max = max, fun = mean, geom = "text", 
+               fun.args = list(label = round(..y.., 1)), vjust = -1, hjust = 0.5, size = 3, color = "black") +
+  
+  # Set axis labels and title
+  labs(x = "Pre_Bird_Height", y = "Alarm Percentage",
+       title = "Alarm Percentage vs Pre_Bird_Height with Superimposed Boxplots") +
+  theme_minimal()
+
+# Display the plot
+print(p)
+
+
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+
+# Data preprocessing for the first plot (Height Difference)
+hwk1_data <- hwk_data %>% 
+  filter(hwk == 1, alarm == 1) %>% 
+  drop_na(Pre_Bird_Height, Flight_apex) %>%
+  mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+
+# Boxplot of Height_Difference against rounded Pre_Bird_Height
+p1 <- ggplot(hwk1_data, aes(x = round(Pre_Bird_Height), y = Height_Difference)) +
+  geom_boxplot(aes(group = round(Pre_Bird_Height)), color = "red", alpha = 0.5, width = 0.3) +
+  labs(x = "Pre_Bird_Height", y = "Height Difference (Flight_apex - Pre_Bird_Height)",
+       title = "Height Difference Boxplots for Alarm Calls") +
+  theme_minimal()
+
+# Data preprocessing for the second plot (Alarm Percentage)
+hwk1_data <- hwk_data %>%
+  filter(hwk == 1) %>%
+  drop_na(Pre_Bird_Height)
+
+# Subset for Pre_Bird_Height <= 15
+hwk_less10 <- subset(hwk1_data, Pre_Bird_Height <= 15)
+
+# Calculate unique integer Pre_Height values
+unique_pre_heights <- unique(round(hwk_less10$Pre_Bird_Height))
+
+# Initialize empty vectors for percentages and sample sizes
+percentage_values <- numeric(length(unique_pre_heights))
+sample_sizes <- numeric(length(unique_pre_heights))
+
+# Calculate percentage and sample size for each unique integer Pre_Height
+for (i in 1:length(unique_pre_heights)) {
+  pre_height_value <- unique_pre_heights[i]
+  total_count <- sum(round(hwk_less10$Pre_Bird_Height) == pre_height_value)
+  alarm_count <- sum(round(hwk_less10$Pre_Bird_Height) == pre_height_value & hwk_less10$Audio_React == "a")
+  percentage_values[i] <- (alarm_count / total_count) * 100
+  sample_sizes[i] <- alarm_count
+}
+
+# Create data frame for the scatter plot
+plot_data <- data.frame(Pre_Height = unique_pre_heights, Percentage = percentage_values, Sample_Size = sample_sizes)
+
+# Create the scatter plot
+p2 <- ggplot(plot_data, aes(x = Pre_Height, y = Percentage)) +
+  geom_point() +
+  labs(x = "Bird Height", y = "Percentage of Alarm Instances", title = "Alarm Percentage by Bird Height") +
+  theme_minimal() +
+  geom_text(aes(label = Sample_Size), hjust = -0.4, vjust = 0.5) + 
+  scale_x_continuous(breaks = unique_pre_heights)
+
+# Combine the two plots into one layout
+grid.arrange(p1, p2, ncol = 1, heights = c(2/3, 1/3))
+
+```
 
 ```{r}
 # Load necessary libraries
@@ -947,13 +1178,13 @@ alarm_summary <- hwk_less15 %>%
 
 # Scatter plot data
 scatter_data <- alarm_summary %>%
-  select(rounded_height, alarm_percentage) %>%
+  dplyr::select(rounded_height, alarm_percentage) %>%
   rename(x = rounded_height, y = alarm_percentage)
 
 # Boxplot data for Flight_Apex (grouped by rounded Pre_Bird_Height)
 boxplot_data <- hwk_less15 %>%
   mutate(rounded_height = round(Pre_Bird_Height)) %>%
-  select(rounded_height, Height_Difference)
+  dplyr::select(rounded_height, Height_Difference)
 
 # Define the scaling factor for the right y-axis to stretch it across the same space as the left axis
 scaling_factor <- 60 / 20  # Left axis range (60) / Right axis range (20)
@@ -968,7 +1199,7 @@ p <- ggplot() +
   geom_boxplot(data = boxplot_data, aes(x = rounded_height, y = (Height_Difference + 10) * scaling_factor, group = factor(rounded_height)), 
                width = 0.3, color = "red", alpha = 0.5, position = position_dodge(width = 0.0)) +
   # Set axis labels and title
-  labs(x = "Pre-Bird Height (meters)", y = "Alarm Percentage (%)") +
+  labs(x = "Height (meters)", y = "Alarm Percentage (%)") +
   theme_minimal() +
   scale_y_continuous(
     limits = c(0, 60),
@@ -1924,9 +2155,15 @@ str(cleaned_df)
 
 ```{r}
 
+cleaned_df[ !is.na(cleaned_df$Pre_Bird_Height),]
+
+subset(cleaned_df, !is.na(Pre_Bird_Height))
+
+str(cleaned_df)
+
 glm_predator <- glm(Alarm_Presence ~ 
                       SocialGroup + 
-                      Pre_Bird_Height + 
+                      Pre_Bird_Height +
                       Flight_dist + 
                       Height_Difference + 
                       Flight_proximity + 
@@ -1942,6 +2179,18 @@ summary(glm_predator)
 
 glm_social1 <- glm(Alarm_Presence ~ SocialGroup, data = cleaned_df, family = binomial(link = "logit"))
 summary(glm_social1)
+anova(glm_social1)
+TukeyHSD(glm_social1, conf.level=.95) 
+
+library(emmeans)
+em <- emmeans(glm_social1), "SocialGroup")
+contrast(em, "pairwise", adjust = "Tukey")
+
+# look into Tukey test - all pairwise comparisons
+# contrast approach
+# pair-wise comparison
+# find aov package
+# add model output ANOVA
 ```
 
 ### GLM Social Factors
@@ -2281,4 +2530,43 @@ file_path <- here("output", "all_model_AIC_table.csv")
 
 # Write the combined table to the CSV file
 write.csv(combined_table, file_path, row.names = FALSE)
+```
+
+# Post-Hoc Tukey
+
+## Social Group
+
+```{r}
+
+glm_height %>% drop_na(Alarm_Presence)
+str(glm_height)
+model <- aov(Alarm_Presence ~ SocialGroup, data = glm_height)
+summary(model)
+
+#perform Tukey's Test
+TukeyHSD(model, conf.level=.95) 
+
+```
+
+```{r}
+plot(TukeyHSD(model, conf.level=.95), las = 2)
+```
+
+## Species
+
+```{r}
+
+glm_height[glm_height == c("na", "#N/A", "none")] <- NA
+glm_height %>% drop_na(Alarm_Presence)
+glm_height %>% drop_na(Alarm_Spp)
+str(glm_height)
+
+aov_filter <- glm_height %>% 
+  filter(Alarm_Presence == 1, na.rm = TRUE)
+
+model <- aov(Alarm_Presence ~ Alarm_Spp, data = glm_height)
+summary(model)
+
+#perform Tukey's Test
+TukeyHSD(model, conf.level=.95) 
 ```
