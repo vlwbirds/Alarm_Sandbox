@@ -7,6 +7,7 @@ editor: visual
 ## Libraries & Data
 
 ```{r}
+library(broom)
 library(igraph)
 library(RColorBrewer)
 library(viridis)
@@ -2173,6 +2174,13 @@ glm_predator <- glm(Alarm_Presence ~
 summary(glm_predator)
 ```
 
+```{r}
+predator_summary <- tidy(glm_predator)
+
+# Save the summary as a CSV file
+write.csv(predator_summary, "predator_summary.csv", row.names = FALSE)
+```
+
 ### GLM Social Group
 
 ```{r}
@@ -2543,13 +2551,26 @@ str(glm_height)
 model <- aov(Alarm_Presence ~ SocialGroup, data = glm_height)
 summary(model)
 
-#perform Tukey's Test
-TukeyHSD(model, conf.level=.95) 
+# Perform Tukey's HSD test
+tukey_results <- TukeyHSD(model, conf.level = 0.95)
 
+# Convert the TukeyHSD results to a data frame
+tukey_df <- as.data.frame(tukey_results[[1]])
+
+# Save the Tukey HSD results to a CSV file
+write.csv(tukey_df, "tukey_hsd_results.csv", row.names = TRUE)
 ```
 
 ```{r}
 plot(TukeyHSD(model, conf.level=.95), las = 2)
+```
+
+```{r}
+
+model_summary <- tidy(model)
+
+# Save the summary as a CSV file
+write.csv(model_summary, "model_summary.csv", row.names = FALSE)
 ```
 
 ## Species
