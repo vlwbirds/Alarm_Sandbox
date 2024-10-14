@@ -7,6 +7,7 @@ editor: visual
 ## Libraries & Data
 
 ```{r}
+library(MCMCglmm)
 library(broom)
 library(igraph)
 library(RColorBrewer)
@@ -2590,4 +2591,66 @@ summary(model)
 
 #perform Tukey's Test
 TukeyHSD(model, conf.level=.95) 
+```
+
+# Mixed Models
+
+## Social
+
+### Height
+
+```{r}
+######MCMCglmm
+library(MCMCglmm)
+library(coda)
+tree<-keep.tip(tree, df$species)
+inv.phylo<-inverseA(tree,nodes="ALL",scale=TRUE)
+prior<-list(G=list(G1=list(V=1,nu=0.002)),
+R=list(V=1,nu=0.002))
+
+
+mcmcglmm_mod<-list()
+for(chain in 1:3){
+mcmcglmm_mod[[chain]]<-MCMCglmm(response~ height + social, random=~species,family="categorical",
+                                 ginverse=list(species=inv.phylo$Ainv),prior=prior,
+                                 data=df,nitt=25e3,burnin=5e3,thin=1e3), verbose=T,pr=T)
+}
+#save model
+saveRDS( mcmcglmm_mod  , "output/models/ mcmcglmm_mod.rds")
+
+#diagnose model, assess satisfactory convergence
+par(mfrow=c(3,2), mar=c(2,2,1,2)) #this is for 3 x 2 parameters, adjust as necessary
+plot(do.call(mcmc.list, lapply( mcmcglmm_mod  , function(m) m$Sol)), ask=F) # look for fuzzy caterpillars
+gelman.diag(do.call(mcmc.list,lapply( mcmcglmm_mod  , function(m) m$Sol))) #Rhat values of each parameter, should all be below 1.1
+gelman.diag(do.call(mcmc.list,lapply( mcmcglmm_mod  , function(m) m$Sol)))$psrf[,1] %>% range #all need to be below 1.1
+summary( mcmcglmm_mod[[1]])#Nef should all be in the 1000s, sometimes can be ok if only a few hundred, but best if high
+#if convergence is good, then interpret
+mcmcglmm_mod[[1]] %>% summary #perform inference on a single model's chain.
+
+
+
+```
+
+```{r}
+######brms
+library(brms)
+iter <- 25e3
+warmup <- 15e3
+thin <- 1e3
+adapt <- 0.99
+chains <- 3
+treedepth <- 11
+
+A2<-ape::vcv.phylo(tree, cor=T) # cor=T is important, means you get correlation matrix from tree as in inverseA()
+brms_mod <- brm(bf( response~ height + social  + 1|gr(species, cov = A)) ) + bernoulli(),
+                  data = df,
+                  data2 = list(A=A2),
+                  control = list(adapt_delta=adapt, max_treedepth=treedepth),
+                  sample_prior = TRUE, save_pars(group = FALSE),
+                  chains = chains, cores=cores, iter = iter, warmup = warmup, thin = thin,
+                  file="output/models/mod_brms")
+
+plot(brms_mod) #fuzzy caterpillars
+summary(brms_mod) #verify Rhat <1.1 and ESS is high
+#verify convergence then interpret
 ```
