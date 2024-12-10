@@ -23,7 +23,7 @@ hwk_data[hwk_data== c("na", "#N/A")] <- NA
 hwk_data$Pre_Bird_Height <-  as.numeric(hwk_data$Pre_Bird_Height)
 hwk_data$Flight_apex <- as.numeric((hwk_data$Flight_apex))
 
-view(hwk_data)
+#view(hwk_data)
 #str(hwk_data)
 
 social_alarm <- read_csv(here("data/Social_Alarm.csv"))
@@ -2033,6 +2033,220 @@ str(HwkGLM)
 ## Assign Vector Type
 
 ```{r}
+# Assigning Appropriat Data Types
+df <- HwkGLM %>%
+  mutate(across(c("Habitat_Primary",
+                  "Habitat_Under_Dom1", 
+                  "Habitat_Under_Dom2", 
+                  "SocialGroup", 
+                  "TarSpp",
+                  "Alarm_Spp",
+                  "Alarm_Sex",
+                  "Tar_Sex",
+                  "Audio_React",
+                  "Pre_Vocal",
+                  "Mid_Vocal",
+                  "Pre_Behav"
+                  ), as.factor)) %>% # Convert multiple columns to factors
+  mutate(across(c("Obs1_bird_dist",
+                  "Shoot_bird_dist",
+                  "Alarm_Presence",
+                  "Alarm_Qty",
+                  "Alarm_Conspecific",
+                  "abundance",
+                  "richness",
+                  "Proximity",
+                  "Flight_dist",
+                  "Flight_apex",
+                  "Flight_proximity",
+                  "Pre_Bird_Height",
+                  "Bird_Dense_Avg",
+                  "Post_Dist",
+                  "Post_Bird_Height",
+                  "Post_Dense_Avg",
+                  "Veg_under_height",
+                  "Veg_mid_low",
+                  "Veg_mid_high",
+                  "Veg_can_low",
+                  "Veg_can_high",
+                  "Rad_10_Avg",
+                  "Veg_Under_Avg",
+                  "Forage_Tree_height"
+                  ), as.numeric)) # Convert multiple columns to numeric
+
+# Create the new column by calculating the difference
+df <- df %>%
+  mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+
+str(df)
+```
+
+## Add Data Relationships and Interactions
+
+```{r}
+
+# Create the new column by calculating the difference
+glm_height <- df %>%
+  mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+
+# View the structure of the updated dataframe
+str(glm_height)
+
+
+
+
+# Function to clean a specific column
+clean_column_in_df <- function(data, column_name, remove_values) {
+  # Convert the column to character (to handle mixed types)
+  data[[column_name]] <- as.character(data[[column_name]])
+  
+  # Remove rows with specific values or NA in the specified column
+  cleaned_data <- data[!is.na(data[[column_name]]) & !data[[column_name]] %in% remove_values, ]
+  
+  # Convert the cleaned column back to numeric (if applicable)
+  cleaned_data[[column_name]] <- suppressWarnings(as.factor(cleaned_data[[column_name]]))
+  
+  return(cleaned_data)
+}
+
+# Define the values you want to remove (e.g., "a", "b", "c")
+remove_values <- c("lek")
+
+# Clean the 'values' column, retaining all other columns
+cleaned_df <- clean_column_in_df(glm_height, "SocialGroup", remove_values)
+
+# View the cleaned data frame
+str(cleaned_df)
+```
+
+### GLM Spp Generic
+
+```{r}
+
+# Load necessary package
+library(dplyr)
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Create a fake dataset
+inputdata <- data.frame(
+  species = rep(c("SpeciesA", "SpeciesB", "SpeciesC"), each = 50),
+  alarm = rbinom(150, 1, 0.3),  # Binary response variable
+  column1 = rnorm(150, mean = 5, sd = 2),  # Continuous predictor
+  column2 = rnorm(150, mean = 10, sd = 3), # Continuous predictor
+  column3 = sample(1:5, 150, replace = TRUE)  # Categorical predictor
+)
+
+# Preview the data
+head(inputdata)
+
+
+# Filter the dataframe by species
+df <- inputdata %>% filter(species == "SpeciesA") #Define the specific species to filter
+
+# Define predictor variables and interactions as character vectors
+predictors <- c("column1", "column2", "column3")  # Replace with actual predictor column names
+interactions <- c("column1:column2", "column1:column2:column3")  # Replace with actual interaction terms
+
+# Build the predictor and interaction components of the formula
+# Only include predictors if there are values in the 'predictors' vector
+predictor_terms <- if (length(predictors) > 0) {
+  paste(predictors, collapse = " + ")
+} else {
+  NULL
+}
+
+# Only include interactions if there are values in the 'interactions' vector
+interaction_terms <- if (length(interactions) > 0) {
+  paste(interactions, collapse = " + ")
+} else {
+  NULL
+}
+
+# Combine predictors and interactions into the final formula
+# If both are NULL, return an error; otherwise, construct formula
+formula_str <- paste("alarm ~", paste(c(predictor_terms, interaction_terms), collapse = " + "))
+formula_obj <- as.formula(formula_str)
+
+# Fit the binomial GLM if there are predictor terms or interactions
+if (!is.null(predictor_terms) || !is.null(interaction_terms)) {
+  model <- glm(formula_obj, data = df, family = binomial)
+  # View summary of the model
+  summary(model)
+} else {
+  stop("No predictors or interactions defined for the model.")
+}
+
+```
+
+### GLM Spp
+
+```{r}
+# Load necessary packages
+library(dplyr)
+library(readr)
+library(here)
+
+# Load dataset
+inputdata <- df
+
+# Preview the data
+head(inputdata)
+
+# Species to filter, use 4-letter code lowercase (e.g., "haru")
+species <- "haru"
+
+# Filter the dataframe by species
+df <- inputdata %>% filter(TarSpp == species) # Extract the specific species to filter
+
+# Define predictor variables and interactions as character vectors
+predictors <- c("Pre_Bird_Height", "Flight_proximity", "Height_Difference", "Veg_Under_Avg")  # Specify predictor column names
+interactions <- c("Pre_Bird_Height:Flight_proximity", "Flight_proximity:Height_Difference")  # Define interaction terms if needed
+
+# Remove rows with NA in any of the specified predictor columns to retain maximum values
+df <- df %>% filter(rowSums(is.na(select(., all_of(predictors)))) == 0)
+
+# Build the predictor and interaction components of the formula
+predictor_terms <- if (length(predictors) > 0) {
+  paste(predictors, collapse = " + ")
+} else {
+  NULL
+}
+
+interaction_terms <- if (length(interactions) > 0) {
+  paste(interactions, collapse = " + ")
+} else {
+  NULL
+}
+
+# Combine predictors and interactions into the final formula
+formula_str <- paste("Alarm_Presence ~", paste(c(predictor_terms, interaction_terms), collapse = " + "))
+formula_obj <- as.formula(formula_str)
+
+# Fit the binomial GLM if there are predictor terms or interactions
+if (!is.null(predictor_terms) || !is.null(interaction_terms)) {
+  model <- glm(formula_obj, data = df, family = binomial(link = "logit"))
+  # View summary of the model
+  summary(model)
+} else {
+  stop("No predictors or interactions defined for the model.")
+}
+
+```
+
+### GLM Spp Multiple Over Threshold
+
+```{r}
+# Load necessary packages
+library(dplyr)
+library(readr)
+library(here)
+library(broom)  # For tidy model summaries
+library(purrr)  # For working with lists
+
+# Loading Reduced GLM Data
+HwkGLM <- read_csv(here("data/HwkGLM.csv"))
 
 # Assigning Appropriat Data Types
 df <- HwkGLM %>%
@@ -2075,82 +2289,490 @@ df <- HwkGLM %>%
                   "Forage_Tree_height"
                   ), as.numeric)) # Convert multiple columns to numeric
 
-str(df)
-```
-
-## 
-
-## Remove NA
-
-I'm not sure if this is needed actually
-
-```{r}
-
-# Function to replace values with NA in factor columns and drop unused levels
-replace_with_na_in_factors <- function(df, replace_values) {
-  # Iterate over each column
-  df[] <- lapply(df, function(column) {
-    if (is.factor(column)) {
-      # Convert factor to character
-      column <- as.character(column)
-    }
-    # Replace unwanted values with NA
-    column[column %in% replace_values] <- NA
-    # Optionally convert back to factor (dropping unused levels)
-    return(factor(column))
-  })
-  return(df)
-}
-
-# Replace values in the specific columns you mentioned
-replace_values <- c("NA", "na", "#N/A", "", "_")
-
-# Apply the replacement function to the dataframe
-df <- replace_with_na_in_factors(df, replace_values)
-
-# View the structure of the updated dataframe
-str(df)
-
-glm_na <- na.omit(df)
-str(glm_na)
-```
-
-## Add Data Relationships and Interactions
-
-```{r}
-
 # Create the new column by calculating the difference
-glm_height <- df %>%
+df <- df %>%
   mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
 
-# View the structure of the updated dataframe
-str(glm_height)
+# Load dataset
+inputdata <- df
 
+# Define predictor variables and interactions as character vectors
+predictors <- c("Pre_Bird_Height",
+                "Bird_Dense_Avg",
+                "Flight_proximity", 
+                "Height_Difference",
+                "Veg_under_height",
+                "Veg_mid_low", 
+                "Veg_Under_Avg"
+               )  # Specify predictor column names
+interactions <- c("Flight_proximity:Pre_Bird_Height", "Height_Difference:Flight_proximity")  # Define interaction terms if needed
 
+# Set minimum sample size threshold
+min_sample_size <- 10  # Adjust this threshold as needed
 
+# Get a list of unique species that meet the sample size threshold
+species_list <- inputdata %>%
+  group_by(TarSpp) %>%
+  filter(n() >= min_sample_size) %>%
+  pull(TarSpp) %>%
+  unique()
 
-# Function to clean a specific column
-clean_column_in_df <- function(data, column_name, remove_values) {
-  # Convert the column to character (to handle mixed types)
-  data[[column_name]] <- as.character(data[[column_name]])
+# Initialize a list to store model summaries for each species and combination
+model_summaries <- list()
+
+# Iterate over each species and fit the GLM individually with all combinations of predictors
+for (species in species_list) {
+  # Filter dataframe for the current species
+  df <- inputdata %>% filter(TarSpp == species)
   
-  # Remove rows with specific values or NA in the specified column
-  cleaned_data <- data[!is.na(data[[column_name]]) & !data[[column_name]] %in% remove_values, ]
+  # Remove rows with NA in any of the specified predictor columns to retain maximum values
+  df <- df %>% filter(rowSums(is.na(select(., all_of(predictors)))) == 0)
   
-  # Convert the cleaned column back to numeric (if applicable)
-  cleaned_data[[column_name]] <- suppressWarnings(as.factor(cleaned_data[[column_name]]))
+  # Check if there are enough rows after filtering for NAs
+  if (nrow(df) < min_sample_size) {
+    message(paste("Skipping", species, "- insufficient data after NA filtering."))
+    next
+  }
   
-  return(cleaned_data)
+  # Generate all possible non-empty combinations of predictors
+  for (k in 1:length(predictors)) {
+    predictor_combinations <- combn(predictors, k, simplify = FALSE)
+    
+    # Iterate over each combination of predictors
+    for (combination in predictor_combinations) {
+      # Check if each predictor in the combination has more than one level
+      valid_combination <- all(sapply(combination, function(var) length(unique(df[[var]])) > 1))
+      
+      if (!valid_combination) {
+        message(paste("Skipping combination", paste(combination, collapse = ", "), "for species", species, "- insufficient levels."))
+        next
+      }
+      
+      # Create the formula string for the current predictor combination
+      predictor_terms <- paste(combination, collapse = " + ")
+      interaction_terms <- if (length(interactions) > 0) {
+        paste(interactions, collapse = " + ")
+      } else {
+        NULL
+      }
+      
+      # Combine predictors and interactions into the final formula
+      formula_str <- paste("Alarm_Presence ~", paste(c(predictor_terms, interaction_terms), collapse = " + "))
+      formula_obj <- as.formula(formula_str)
+      
+      # Fit the binomial GLM if there are predictor terms or interactions
+      model <- glm(formula_obj, data = df, family = binomial)
+      
+      # Get a tidy summary of the model using broom::tidy
+      model_summary <- tidy(model) %>%
+        mutate(species = species,
+               predictors = paste(combination, collapse = ", "),
+               AIC = AIC(model),
+               BIC = BIC(model))  # Add species, predictors, AIC, and BIC to each row
+      
+      # Append the model summary to the list
+      model_summaries[[paste(species, paste(combination, collapse = "_"), sep = "_")]] <- model_summary
+    }
+  }
 }
 
-# Define the values you want to remove (e.g., "a", "b", "c")
-remove_values <- c("lek")
+# Combine all summaries into one data frame
+all_summaries <- bind_rows(model_summaries)
 
-# Clean the 'values' column, retaining all other columns
-cleaned_df <- clean_column_in_df(glm_height, "SocialGroup", remove_values)
+# Export the combined summaries to a CSV file
+write_csv(all_summaries, here("output/GLM_summaries_by_species_combinations.csv"))
 
-# View the cleaned data frame
-str(cleaned_df)
+cat("Model summaries saved to 'output/GLM_summaries_by_species_combinations.csv'\n")
+
+```
+
+```{r}
+view(read_csv(here("output/GLM_summaries_by_species_combinations.csv")))
+```
+
+```{r}
+# Load necessary packages
+library(dplyr)
+library(readr)
+library(here)
+library(broom)  # For tidy model summaries
+library(purrr)  # For working with lists
+
+# Load dataset
+HwkGLM <- read_csv(here("data/HwkGLM.csv"))
+
+# Convert appropriate columns to factors and numerics
+df <- HwkGLM %>%
+  mutate(across(c("Habitat_Primary",
+                  "Habitat_Under_Dom1", 
+                  "Habitat_Under_Dom2", 
+                  "SocialGroup", 
+                  "TarSpp",
+                  "Alarm_Spp",
+                  "Alarm_Sex",
+                  "Tar_Sex",
+                  "Audio_React",
+                  "Pre_Vocal",
+                  "Mid_Vocal",
+                  "Pre_Behav"
+                  ), as.factor)) %>% 
+  mutate(across(c("Obs1_bird_dist",
+                  "Shoot_bird_dist",
+                  "Alarm_Presence",
+                  "Alarm_Qty",
+                  "Alarm_Conspecific",
+                  "abundance",
+                  "richness",
+                  "Proximity",
+                  "Flight_dist",
+                  "Flight_apex",
+                  "Flight_proximity",
+                  "Pre_Bird_Height",
+                  "Bird_Dense_Avg",
+                  "Post_Dist",
+                  "Post_Bird_Height",
+                  "Post_Dense_Avg",
+                  "Veg_under_height",
+                  "Veg_mid_low",
+                  "Veg_mid_high",
+                  "Veg_can_low",
+                  "Veg_can_high",
+                  "Rad_10_Avg",
+                  "Veg_Under_Avg",
+                  "Forage_Tree_height"
+                  ), as.numeric)) 
+
+# Add a derived column for height difference
+df <- df %>%
+  mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+
+# Define predictor variables and interactions
+predictors <- c("Pre_Bird_Height",
+                "Bird_Dense_Avg",
+                "Flight_proximity", 
+                "Height_Difference",
+                "Veg_under_height",
+                "Veg_mid_low", 
+                "Veg_Under_Avg"
+               )
+interactions <- c("Flight_proximity:Pre_Bird_Height", "Height_Difference:Flight_proximity")
+
+# Minimum sample size for a valid model run
+min_sample_size <- 10
+
+# Initialize a list to store model summaries
+model_summaries <- list()
+
+# Generate all possible non-empty combinations of predictors
+for (k in 1:length(predictors)) {
+  predictor_combinations <- combn(predictors, k, simplify = FALSE)
+  
+  # Iterate over each combination of predictors
+  for (combination in predictor_combinations) {
+    # Check if each predictor in the combination has more than one level
+    valid_combination <- all(sapply(combination, function(var) length(unique(df[[var]])) > 1))
+    
+    if (!valid_combination) {
+      message(paste("Skipping combination", paste(combination, collapse = ", "), "- insufficient levels."))
+      next
+    }
+    
+    # Create the formula string for the current predictor combination
+    predictor_terms <- paste(combination, collapse = " + ")
+    interaction_terms <- if (length(interactions) > 0) {
+      paste(interactions, collapse = " + ")
+    } else {
+      NULL
+    }
+    
+    # Combine predictors and interactions into the final formula
+    formula_str <- paste("Alarm_Presence ~", paste(c(predictor_terms, interaction_terms), collapse = " + "))
+    formula_obj <- as.formula(formula_str)
+    
+    # Filter rows with no missing data for the current combination
+    filtered_df <- df %>% filter(rowSums(is.na(select(., all_of(combination)))) == 0)
+    
+    # Ensure sufficient sample size
+    sample_size <- nrow(filtered_df)
+    if (sample_size < min_sample_size) {
+      message(paste("Skipping combination", paste(combination, collapse = ", "), "- insufficient data (sample size:", sample_size, ")."))
+      next
+    }
+    
+    # Fit the GLM
+    model <- glm(formula_obj, data = filtered_df, family = binomial)
+    
+    # Get a tidy summary of the model
+    model_summary <- tidy(model) %>%
+      mutate(predictors = paste(combination, collapse = ", "),
+             AIC = AIC(model),
+             BIC = BIC(model),
+             sample_size = sample_size)  # Add predictors, AIC, BIC, and sample size
+    
+    # Append the summary to the list
+    model_summaries[[paste(predictor_terms, collapse = "_")]] <- model_summary
+  }
+}
+
+# Combine all summaries into one data frame
+all_summaries <- bind_rows(model_summaries)
+
+# Export the combined summaries to a CSV file
+write_csv(all_summaries, here("output/GLM_summaries_all_combinations.csv"))
+
+cat("Model summaries saved to 'output/GLM_summaries_all_combinations.csv'\n")
+
+```
+
+```{r}
+view(read_csv(here("output/GLM_summaries_all_combinations.csv")))
+```
+
+```{r}
+# Load necessary packages
+library(dplyr)
+library(readr)
+library(here)
+library(broom)
+
+# Load dataset
+HwkGLM <- read_csv(here("data/HwkGLM.csv"))
+
+# Assigning appropriate data types
+df <- HwkGLM %>%
+  mutate(across(c("Habitat_Primary",
+                  "Habitat_Under_Dom1", 
+                  "Habitat_Under_Dom2", 
+                  "SocialGroup", 
+                  "TarSpp",
+                  "Alarm_Spp",
+                  "Alarm_Sex",
+                  "Tar_Sex",
+                  "Audio_React",
+                  "Pre_Vocal",
+                  "Mid_Vocal",
+                  "Pre_Behav"
+                  ), as.factor)) %>%
+  mutate(across(c("Obs1_bird_dist",
+                  "Shoot_bird_dist",
+                  "Alarm_Presence",
+                  "Alarm_Qty",
+                  "Alarm_Conspecific",
+                  "abundance",
+                  "richness",
+                  "Proximity",
+                  "Flight_dist",
+                  "Flight_apex",
+                  "Flight_proximity",
+                  "Pre_Bird_Height",
+                  "Bird_Dense_Avg",
+                  "Post_Dist",
+                  "Post_Bird_Height",
+                  "Post_Dense_Avg",
+                  "Veg_under_height",
+                  "Veg_mid_low",
+                  "Veg_mid_high",
+                  "Veg_can_low",
+                  "Veg_can_high",
+                  "Rad_10_Avg",
+                  "Veg_Under_Avg",
+                  "Forage_Tree_height"
+                  ), as.numeric)) %>%
+  mutate(Height_Difference = Flight_apex - Pre_Bird_Height)
+
+# Load dataset into inputdata
+inputdata <- df
+
+# Define predictor variables
+predictors <- c("Pre_Bird_Height",
+                "Bird_Dense_Avg",
+                "Flight_proximity", 
+                "Height_Difference",
+                "Veg_under_height",
+                "Veg_mid_low", 
+                "Veg_Under_Avg")
+
+# Set minimum sample size threshold
+min_sample_size <- 10
+
+# Initialize a list to store model summaries
+model_summaries <- list()
+
+# Remove rows with NA in any predictor column before iteration
+filtered_df <- inputdata %>%
+  filter(rowSums(is.na(select(., all_of(predictors)))) == 0)
+
+# Generate all possible non-empty combinations of predictors
+predictor_combinations <- unlist(
+  lapply(1:length(predictors), function(k) combn(predictors, k, simplify = FALSE)),
+  recursive = FALSE
+)
+
+# Iterate over each predictor combination
+for (combination in predictor_combinations) {
+  # Check if all predictors in the combination have sufficient levels
+  valid_combination <- all(sapply(combination, function(var) length(unique(filtered_df[[var]])) > 1))
+  if (!valid_combination) next
+  
+  # Always include the predictors in the model
+  predictor_terms <- paste(combination, collapse = " + ")
+  
+  # Initialize interaction terms
+  interaction_terms <- NULL
+  
+  # Create interaction terms only if there are at least 2 predictors in the combination
+  if (length(combination) > 1) {
+    interaction_terms <- combn(combination, 2, function(x) paste(x, collapse = ":"), simplify = TRUE)
+  }
+  
+  # Test the model with predictors only
+  formula_str <- paste("Alarm_Presence ~", predictor_terms)
+  model <- glm(as.formula(formula_str), data = filtered_df, family = binomial)
+  
+  # Store the summary
+  model_summaries[[paste(combination, collapse = "_")]] <- tidy(model) %>%
+    mutate(predictors = predictor_terms,
+           interactions = "None",
+           AIC = AIC(model),
+           BIC = BIC(model),
+           sample_size = nrow(filtered_df))
+  
+  # Test the model with predictors + interactions
+  if (!is.null(interaction_terms)) {
+    interaction_terms_str <- paste(interaction_terms, collapse = " + ")
+    formula_str_with_interactions <- paste("Alarm_Presence ~", paste(predictor_terms, interaction_terms_str, sep = " + "))
+    
+    model_with_interactions <- glm(as.formula(formula_str_with_interactions), data = filtered_df, family = binomial)
+    
+    # Store the summary
+    model_summaries[[paste(combination, collapse = "_", "interactions")]] <- tidy(model_with_interactions) %>%
+      mutate(predictors = predictor_terms,
+             interactions = interaction_terms_str,
+             AIC = AIC(model_with_interactions),
+             BIC = BIC(model_with_interactions),
+             sample_size = nrow(filtered_df))
+  }
+}
+
+# Combine all summaries into one data frame
+all_summaries <- bind_rows(model_summaries)
+
+# Export the combined summaries to a CSV file
+write_csv(all_summaries, here("output/GLM_summaries_with_interactions.csv"))
+
+cat("Model summaries saved to 'output/GLM_summaries_with_interactions.csv'\n")
+
+
+```
+
+```{r}
+view(read_csv(here("output/GLM_summaries_with_interactions.csv")))
+```
+
+subtract the mean and divide by the standard deviation
+
+after in df \_std for standardized values
+
+fit a global model, as complex as justifiable with all reasonable variables
+
+reduce variables with excessively high inflation factor (VIF) performance packagel
+
+reduce the effects
+
+z-score transformation
+
+exploring the garden of forking paths
+
+### Plots
+
+```{r}
+# Data
+intercept <- -1.248057013
+slope <- 0.056232165
+standard_error <- 0.031827893
+
+# Predictor range
+flight_proximity_range <- seq(0, 20, length.out = 100)
+
+# Calculate estimates and confidence intervals
+estimate <- intercept + slope * flight_proximity_range
+lower_bound <- estimate - 1.96 * standard_error
+upper_bound <- estimate + 1.96 * standard_error
+
+# Plot
+plot(flight_proximity_range, estimate, type = "l", col = "blue", lwd = 2, 
+     xlab = "Flight Proximity", ylab = "Estimate", 
+     main = "GLM Linear Plot: Flight Proximity")
+polygon(c(flight_proximity_range, rev(flight_proximity_range)), 
+        c(lower_bound, rev(upper_bound)), 
+        col = rgb(0, 0, 1, 0.2), border = NA)
+abline(h = 0, col = "black", lty = 2) # Zero line
+legend("bottomright", legend = c("Estimate", "95% Confidence Interval"), 
+       col = c("blue", rgb(0, 0, 1, 0.2)), lty = c(1, NA), 
+       fill = c(NA, rgb(0, 0, 1, 0.2)), bty = "n")
+
+```
+
+```{r}
+# Data
+intercept <- -2.483993707
+slope_under <- 1.282182799
+slope_mid <- 0.356186483
+interaction <- -0.239699977
+se_under <- 0.485161982
+se_mid <- 0.147238530
+se_interaction <- 0.083460476
+
+# Ranges for predictors
+veg_under_height <- seq(0, 5, length.out = 100)
+veg_mid_low <- seq(0, 5, length.out = 100)
+
+# Create a grid for interaction
+grid <- expand.grid(veg_under_height = veg_under_height, veg_mid_low = veg_mid_low)
+
+# Calculate estimates
+grid$estimate <- intercept +
+  slope_under * grid$veg_under_height +
+  slope_mid * grid$veg_mid_low +
+  interaction * grid$veg_under_height * grid$veg_mid_low
+
+# Plot: Main Effects
+par(mfrow = c(1, 2)) # Split plotting area for two plots
+
+# Plot 1: Veg_under_height
+estimate_under <- intercept + slope_under * veg_under_height
+lower_bound_under <- estimate_under - 1.96 * se_under
+upper_bound_under <- estimate_under + 1.96 * se_under
+
+plot(veg_under_height, estimate_under, type = "l", col = "blue", lwd = 2, 
+     xlab = "Veg_under_height", ylab = "Estimate", 
+     main = "Effect of Veg_under_height")
+polygon(c(veg_under_height, rev(veg_under_height)), 
+        c(lower_bound_under, rev(upper_bound_under)), 
+        col = rgb(0, 0, 1, 0.2), border = NA)
+abline(h = 0, col = "black", lty = 2)
+
+# Plot 2: Veg_mid_low
+estimate_mid <- intercept + slope_mid * veg_mid_low
+lower_bound_mid <- estimate_mid - 1.96 * se_mid
+upper_bound_mid <- estimate_mid + 1.96 * se_mid
+
+plot(veg_mid_low, estimate_mid, type = "l", col = "darkgreen", lwd = 2, 
+     xlab = "Veg_mid_low", ylab = "Estimate", 
+     main = "Effect of Veg_mid_low")
+polygon(c(veg_mid_low, rev(veg_mid_low)), 
+        c(lower_bound_mid, rev(upper_bound_mid)), 
+        col = rgb(0, 0.5, 0, 0.2), border = NA)
+abline(h = 0, col = "black", lty = 2)
+
+# Plot: Interaction Effect
+par(mfrow = c(1, 1)) # Reset to single plot
+library(lattice)
+wireframe(estimate ~ veg_under_height * veg_mid_low, data = grid,
+          xlab = "Veg_under_height", ylab = "Veg_mid_low", zlab = "Estimate",
+          main = "Interaction: Veg_under_height * Veg_mid_low",
+          col.regions = heat.colors(100), drape = TRUE, screen = list(z = 30, x = -60))
+
 ```
 
 ### GLM Predator
@@ -2169,8 +2791,8 @@ glm_predator <- glm(Alarm_Presence ~
                       Flight_dist + 
                       Height_Difference + 
                       Flight_proximity + 
-                      Height_Difference * Flight_proximity + 
-                      Pre_Bird_Height * Height_Difference * Flight_proximity
+                      Height_Difference:Flight_proximity + 
+                      Pre_Bird_Height:Height_Difference:Flight_proximity
                       , data = cleaned_df, family = binomial(link = "logit"))
 summary(glm_predator)
 ```
@@ -2595,28 +3217,269 @@ TukeyHSD(model, conf.level=.95)
 
 # Mixed Models
 
-## Social
+### Load GLM Data
 
-### Height
+```{r}
+# Loading Reduced GLM Data
+df <- read_csv(here("data/HwkGLM.csv"))
+str(df)
+```
+
+### Assign Vector Type
+
+```{r}
+df$BirdTree <- gsub(" ", "_", df$BirdTree)
+# Assigning Appropriat Data Types
+df <- df %>%
+  mutate(across(c("Habitat_Primary",
+                  "Habitat_Under_Dom1", 
+                  "Habitat_Under_Dom2", 
+                  "SocialGroup", 
+                  "TarSpp",
+                  "BirdTree",
+                  "Alarm_Presence",
+                  "Alarm_Spp",
+                  "Alarm_Sex",
+                  "Tar_Sex",
+                  "Audio_React",
+                  "Pre_Vocal",
+                  "Mid_Vocal",
+                  "Pre_Behav"
+                  ), as.factor)) %>% # Convert multiple columns to factors
+  mutate(across(c("Obs1_bird_dist",
+                  "Shoot_bird_dist",
+                  "Alarm_Qty",
+                  "Alarm_Conspecific",
+                  "abundance",
+                  "richness",
+                  "Proximity",
+                  "Flight_dist",
+                  "Flight_apex",
+                  "Flight_proximity",
+                  "Pre_Bird_Height",
+                  "Bird_Dense_Avg",
+                  "Post_Dist",
+                  "Post_Bird_Height",
+                  "Post_Dense_Avg",
+                  "Veg_under_height",
+                  "Veg_mid_low",
+                  "Veg_mid_high",
+                  "Veg_can_low",
+                  "Veg_can_high",
+                  "Rad_10_Avg",
+                  "Veg_Under_Avg",
+                  "Forage_Tree_height"
+                  ), as.numeric)) # Convert multiple columns to numeric
+
+str(df)
+```
+
+### Load Phylogeny Data
+
+```{r}
+library(ape)
+library(castor)
+library(phytools)
+
+# data sets
+# nex_data is 100 trees
+nex_data <- read.nexus(here("data/trees/MayrAllErickson-tree-pruner-205594f1-a408-4345-b027-64dfdee069f9/output.nex"))
+
+spp_alarm <- read.csv(here("data/spp_alarm.csv"))
+#view(spp_alarm)
+```
+
+### Create Consensus Tree
+
+```{r}
+tree <- consensus(nex_data, p = 0.5)
+plot(tree, cex = 0.8)
+```
+
+### Plot Alarm Phylogeny
+
+```{r}
+# Replace spaces with underscores in species names
+spp_alarm$BirdTree <- gsub(" ", "_", spp_alarm$BirdTree)
+
+# Prune the tree to include only species present in the alarm data
+pruned_tree <- keep.tip(tree, spp_alarm$BirdTree)
+
+# Reorder alarm data to match pruned_tree$tip.label
+alarm <- spp_alarm$alarm[match(pruned_tree$tip.label, spp_alarm$BirdTree)]
+
+# Handle NA values
+filtered_indices <- !is.na(alarm)
+alarm <- alarm[filtered_indices]
+pruned_tree <- drop.tip(pruned_tree, pruned_tree$tip.label[!filtered_indices])
+
+# Ensure alignment between alarm vector and tree tips
+names(alarm) <- pruned_tree$tip.label
+
+# Root the tree using an outgroup
+rooted_tree <- root(pruned_tree, outgroup = "Penelope_jacquacu", resolve.root = TRUE)
+
+if (is.null(rooted_tree$edge.length)) {
+    rooted_tree$edge.length <- rep(1, nrow(rooted_tree$edge))
+}
+
+# Ensure the tree is ultrametric
+if (!is.ultrametric(rooted_tree)) {
+  rooted_tree <- chronos(rooted_tree)
+}
+
+# Assign uniform branch lengths
+rooted_tree <- compute.brlen(rooted_tree, method = "uniform")
+
+# Run contMap with error checking
+tryCatch({
+  obj <- contMap(rooted_tree, alarm, plot = FALSE, res = 200)
+  plot(setMap(obj, invert = TRUE), fsize = c(0.7, 1), leg.txt = "Alarm Calling", lwd = 3)
+}, error = function(e) {
+  print("Error in contMap:")
+  print(e)
+  print("Checking input data...")
+  print(alarm)
+  print(rooted_tree$tip.label)
+})
+```
+
+## Phylogeny GLMs
+
+### Rooted Phylogeny
+
+```{r}
+
+# Prune the tree to include only species present in the alarm data
+pruned_tree <- keep.tip(tree, df$BirdTree)
+
+# Reorder alarm data to match pruned_tree$tip.label
+alarm <- df$Alarm_Presence[match(pruned_tree$tip.label, df$Alarm_Presence)]
+
+# Handle NA values
+filtered_indices <- !is.na(alarm)
+alarm <- alarm[filtered_indices]
+pruned_tree <- drop.tip(pruned_tree, pruned_tree$tip.label[!filtered_indices])
+
+# Ensure alignment between alarm vector and tree tips
+names(alarm) <- pruned_tree$tip.label
+str(pruned_tree)
+
+# Root the tree using an outgroup
+rooted_tree <- root(pruned_tree, outgroup = "Penelope_jacquacu", resolve.root = TRUE)
+
+if (is.null(rooted_tree$edge.length)) {
+    rooted_tree$edge.length <- rep(1, nrow(rooted_tree$edge))
+}
+
+# Ensure the tree is ultrametric
+if (!is.ultrametric(rooted_tree)) {
+  rooted_tree <- chronos(rooted_tree)
+}
+
+# Assign uniform branch lengths
+rooted_tree <- compute.brlen(rooted_tree, method = "uniform")
+
+# Run contMap with error checking
+tryCatch({
+  obj <- contMap(rooted_tree, alarm, plot = FALSE, res = 200)
+  plot(setMap(obj, invert = TRUE), fsize = c(0.7, 1), leg.txt = "Alarm Calling", lwd = 3)
+}, error = function(e) {
+  print("Error in contMap:")
+  print(e)
+  print("Checking input data...")
+  print(alarm)
+  print(rooted_tree$tip.label)
+})
+```
+
+### Social
+
+#### Troubleshooting
+
+```{r}
+unique(rooted_tree$tip.label)
+unique(rooted_tree$node.label)
+str(rooted_tree)
+rooted_tree$node.label <- NULL
+
+setdiff(unique(df$BirdTree), rownames(inv.phylo$Ainv))
+
+unmatched_species <- setdiff(levels(cleaned_data$BirdTree), rownames(inv.phylo$Ainv))
+print(unmatched_species)
+
+# Find which levels are not represented in the data
+missing_levels <- setdiff(rownames(inv.phylo$Ainv), levels(cleaned_data$BirdTree))
+print(missing_levels) # Should be empty if everything is matched
+
+# Optionally drop unused levels in cleaned_data
+cleaned_data$BirdTree <- droplevels(cleaned_data$BirdTree)
+
+table(cleaned_data$BirdTree)
+
+# Get species names from BirdTree
+birdtree_species <- levels(BirdTree)
+
+# Compare with the reference data frame
+reference_species <- unique(df$BirdTree)  # Replace with your actual column name
+
+# Check for mismatches
+missing_from_tree <- setdiff(reference_species, birdtree_species)
+missing_from_reference <- setdiff(birdtree_species, reference_species)
+
+if (length(missing_from_tree) > 0) {
+    print(paste("Missing from BirdTree:", paste(missing_from_tree, collapse = ", ")))
+}
+
+if (length(missing_from_reference) > 0) {
+    print(paste("Missing from reference df:", paste(missing_from_reference, collapse = ", ")))
+}
+
+
+# Print levels and their corresponding entries in the inverse matrix
+for (species in levels(cleaned_data$BirdTree)) {
+  if (!species %in% rownames(inv.phylo$Ainv)) {
+    print(paste("Species not found in Ainv:", species))
+  }
+}
+```
+
+## MCMCglmm
 
 ```{r}
 ######MCMCglmm
 library(MCMCglmm)
 library(coda)
-tree<-keep.tip(tree, df$species)
-inv.phylo<-inverseA(tree,nodes="ALL",scale=TRUE)
+library(ape)
+library(castor)
+library(phytools)
+
+# data sets
+# nex_data is 100 trees
+nex_data <- read.nexus(here("data/trees/MayrAllErickson-tree-pruner-205594f1-a408-4345-b027-64dfdee069f9/output.nex"))
+tree <- consensus(nex_data, p = 0.5)
+
+
+# Loading Reduced GLM Data
+df <- read_csv(here("data/HwkGLM.csv"))
+
+cleaned_data <- df %>% drop_na(Alarm_Presence, Pre_Bird_Height, SocialGroup, BirdTree)
+# cleaned_data <- droplevels(cleaned_data)
+
+rooted_tree$node.label <- paste0("node", 1:length(rooted_tree$node.label), rooted_tree$node.label)
+inv.phylo<-inverseA(rooted_tree,nodes="ALL",scale=TRUE)
 prior<-list(G=list(G1=list(V=1,nu=0.002)),
 R=list(V=1,nu=0.002))
 
 
 mcmcglmm_mod<-list()
 for(chain in 1:3){
-mcmcglmm_mod[[chain]]<-MCMCglmm(response~ height + social, random=~species,family="categorical",
-                                 ginverse=list(species=inv.phylo$Ainv),prior=prior,
-                                 data=df,nitt=25e3,burnin=5e3,thin=1e3), verbose=T,pr=T)
+  mcmcglmm_mod[[chain]]<-MCMCglmm(Alarm_Presence ~ Pre_Bird_Height + SocialGroup, random=~BirdTree, data = cleaned_data, family="categorical",
+   ginverse=list((BirdTree=inv.phylo$Ainv), prior=prior, 
+                 data=df,nitt=25e3,burnin=5e3,thin=1e3), verbose=T ,pr=T)
 }
 #save model
-saveRDS( mcmcglmm_mod  , "output/models/ mcmcglmm_mod.rds")
+saveRDS( mcmcglmm_mod  , here("output/models/mcmcglmm_mod.rds"))
 
 #diagnose model, assess satisfactory convergence
 par(mfrow=c(3,2), mar=c(2,2,1,2)) #this is for 3 x 2 parameters, adjust as necessary
@@ -2627,22 +3490,252 @@ summary( mcmcglmm_mod[[1]])#Nef should all be in the 1000s, sometimes can be ok 
 #if convergence is good, then interpret
 mcmcglmm_mod[[1]] %>% summary #perform inference on a single model's chain.
 
+#if convergence is good, then interpret from all chains together
+all_chains<-mcmcglmm_mod2[[1]]#initialize object
+#add other chains in there
+all_chains$Sol<-as.mcmc(rbind(mcmcglmm_mod2[[1]]$Sol, mcmcglmm_mod2[[2]]$Sol, mcmcglmm_mod2[[3]]$Sol))
+all_chains$VCV<-as.mcmc(rbind(mcmcglmm_mod2[[1]]$VCV, mcmcglmm_mod2[[2]]$VCV, mcmcglmm_mod2[[3]]$VCV))
+#all_chains$Liab<-as.mcmc(rbind(mcmcglmm_mod2[[1]]$Liab, mcmcglmm_mod2[[2]]$Liab, mcmcglmm_mod2[[3]]$Liab))#this can be needed, ignore if is NULL
+summary(all_chains)  
 
 
 ```
 
 ```{r}
+# Load necessary libraries
+library(MCMCglmm)
+library(coda)
+library(ape)
+library(castor)
+library(phytools)
+library(tidyverse)  # For data manipulation
+library(here)       # For file paths
+
+# Load nexus file (100 trees)
+nex_data <- read.nexus(here("data/trees/MayrAllErickson-tree-pruner-205594f1-a408-4345-b027-64dfdee069f9/output.nex"))
+tree <- consensus(nex_data, p = 0.5)  # Generate a consensus tree
+
+# Load and clean data
+df <- read_csv(here("data/HwkGLM.csv"))
+# Replace spaces with underscores in species names
+df$BirdTree <- gsub(" ", "_", df$BirdTree)
+cleaned_data <- df %>% drop_na(Alarm_Presence, Pre_Bird_Height, SocialGroup, BirdTree)
+
+# Check for matching species between cleaned data and tree
+species_to_keep <- unique(cleaned_data$BirdTree)
+matching_species <- intersect(tree$tip.label, species_to_keep)
+
+if (length(matching_species) == 0) {
+  stop("No matching species found between cleaned data and tree. Check species names for consistency.")
+}
+
+# Prune the tree to include only matching species
+pruned_tree <- drop.tip(tree, setdiff(tree$tip.label, matching_species))
+
+# Add branch lengths to the pruned tree if they are missing
+if (is.null(pruned_tree$edge.length)) {
+  pruned_tree$edge.length <- rep(1, nrow(pruned_tree$edge))  # Assign a default branch length of 1
+}
+
+# Root the tree if necessary
+if (!is.rooted(pruned_tree)) {
+  # Choose a suitable outgroup if you have one, or root it by midpoint if none
+  rooted_tree <- midpoint.root(pruned_tree)  # Midpoint rooting as a general approach
+} else {
+  rooted_tree <- pruned_tree
+}
+
+# Set node labels (optional, if you need labeled nodes for further analyses)
+rooted_tree$node.label <- paste0("node", 1:length(rooted_tree$node.label))
+
+# Assign arbitrary branch lengths if they are missing
+if (is.null(rooted_tree$edge.length)) {
+  rooted_tree$edge.length <- rep(1, nrow(rooted_tree$edge))
+}
+
+# Make the tree ultrametric using `chronos` with a simple constant rate model
+ultrametric_tree <- chronos(rooted_tree, lambda = 1)  # lambda = 1 applies a constant rate
+
+# Verify the tree is now ultrametric
+is.ultrametric(ultrametric_tree)  # Should return TRUE
+
+# Ensure BirdTree contains only species present in the tree
+tree_species <- ultrametric_tree$tip.label
+cleaned_data <- cleaned_data %>% filter(BirdTree %in% tree_species)
+
+# Convert BirdTree to a factor with levels matching tree species, then drop unused levels
+cleaned_data$BirdTree <- factor(cleaned_data$BirdTree, levels = tree_species)
+cleaned_data$BirdTree <- droplevels(cleaned_data$BirdTree)
+
+# Confirm that levels of BirdTree in cleaned_data match the row names of inv.phylo$Ainv
+inv.phylo <- inverseA(ultrametric_tree, nodes = "ALL", scale = TRUE)
+
+# Get species names in ginverse and check alignment with cleaned_data's BirdTree
+ginverse_species <- rownames(inv.phylo$Ainv)
+data_species <- levels(cleaned_data$BirdTree)
+
+# Check for any mismatch
+missing_in_ginverse <- setdiff(data_species, ginverse_species)
+missing_in_data <- setdiff(ginverse_species, data_species)
+
+# Display messages if there are mismatches
+if (length(missing_in_ginverse) > 0) {
+  warning("Species in data but not in ginverse: ", paste(missing_in_ginverse, collapse = ", "))
+}
+if (length(missing_in_data) > 0) {
+  warning("Species in ginverse but not in data: ", paste(missing_in_data, collapse = ", "))
+}
+
+# Get the species labels in the Ainv matrix
+Ainv_species <- rownames(inv.phylo$Ainv)
+
+# Identify species in tree_species that are not in Ainv_species
+missing_species <- setdiff(tree_species, Ainv_species)
+if (length(missing_species) > 0) {
+  cat("Warning: The following species are in tree_species but not in Ainv:\n")
+  print(missing_species)
+}
+
+# Filter Ainv to include only species in both tree_species and Ainv_species
+common_species <- intersect(tree_species, Ainv_species)
+
+# Check the dimensions of Ainv and the row/column names
+cat("Dimensions of Ainv:", dim(inv.phylo$Ainv), "\n")
+cat("Species in Ainv:", rownames(inv.phylo$Ainv), "\n")
+
+# Check the species in cleaned_data and the pruned tree
+cat("Species in cleaned_data:", unique(cleaned_data$BirdTree), "\n")
+cat("Species in pruned tree:", pruned_tree$tip.label, "\n")
+
+species_only_Ainv <- inv.phylo$Ainv[common_species, common_species, drop = FALSE]
+
+# Now continue with model fitting using the filtered species_only_Ainv
+prior <- list(G = list(G1 = list(V = 1, nu = 0.002)),
+              R = list(V = 1, nu = 0.002))
+
+mcmcglmm_mod <- list()
+for (chain in 1:3) {
+  mcmcglmm_mod[[chain]] <- MCMCglmm(
+    Alarm_Presence ~ Pre_Bird_Height + SocialGroup,
+    random = ~BirdTree,
+    data = cleaned_data,
+    family = "categorical",
+    ginverse = list(BirdTree = species_only_Ainv),
+    prior = prior,
+    nitt = 25000,
+    burnin = 5000,
+    thin = 1000,
+    verbose = TRUE,
+    pr = TRUE
+  )
+}
+
+# Save the model
+saveRDS(mcmcglmm_mod, here("output/models/mcmcglmm_mod.rds"))
+
+
+
+
+# Diagnostic checks
+par(mfrow = c(3, 2), mar = c(2, 2, 1, 2))
+plot(do.call(mcmc.list, lapply(mcmcglmm_mod, function(m) m$Sol)), ask = FALSE)
+gelman_diag <- gelman.diag(do.call(mcmc.list, lapply(mcmcglmm_mod, function(m) m$Sol)))
+print(gelman_diag$psrf[, 1] %>% range)  # Check Rhat values
+summary(mcmcglmm_mod[[1]])  # Effective sample sizes
+
+# Combine chains for inference if convergence is good
+all_chains <- mcmcglmm_mod[[1]]
+all_chains$Sol <- as.mcmc(rbind(mcmcglmm_mod[[1]]$Sol, mcmcglmm_mod[[2]]$Sol, mcmcglmm_mod[[3]]$Sol))
+all_chains$VCV <- as.mcmc(rbind(mcmcglmm_mod[[1]]$VCV, mcmcglmm_mod[[2]]$VCV, mcmcglmm_mod[[3]]$VCV))
+summary(all_chains)  # Final summary across all chains
+
+```
+
+```{r}
+inv.phylo <- inverseA(rooted_tree, nodes = "ALL", scale = TRUE)
+
+df <- df[df$BirdTree %in% rownames(inv.phylo$Ainv), ]
+
+# Define prior
+prior <- list(G = list(G1 = list(V = 1, nu = 0.002)),
+              R = list(V = 1, nu = 0.002))
+
+# Create list to store model chains
+mcmcglmm_mod <- list()
+
+# Run MCMCglmm for 3 chains
+for (chain in 1:3) {
+  mcmcglmm_mod[[chain]] <- MCMCglmm(
+    Alarm_Presence~ Pre_Bird_Height + SocialGroup, 
+    random = ~ BirdTree, 
+    family = "categorical",
+    ginverse = list(BirdTree = inv.phylo$Ainv),  # `ginverse` is outside `data`
+    prior = prior,  # Prior is also outside `data`
+    data = df, 
+    nitt = 25000, 
+    burnin = 5000, 
+    thin = 1000, 
+    verbose = TRUE, 
+    pr = TRUE
+  )
+}
+
+# Save the model
+saveRDS(mcmcglmm_mod, here("output/models/mcmcglmm_mod.rds"))
+
+# Diagnose model, assess satisfactory convergence
+par(mfrow = c(3, 2), mar = c(2, 2, 1, 2))  # Adjust the plotting window
+
+# Plot traces for each model chain
+plot(do.call(mcmc.list, lapply(mcmcglmm_mod, function(m) m$Sol)), ask = FALSE)
+
+# Check convergence with Gelman-Rubin diagnostic
+gelman_diag_sol <- gelman.diag(do.call(mcmc.list, lapply(mcmcglmm_mod, function(m) m$Sol)))
+gelman_diag_sol
+
+# Ensure Rhat values are below 1.1
+range(gelman_diag_sol$psrf[, 1])
+
+# Inspect model summary (Neff values, etc.)
+summary(mcmcglmm_mod[[1]])
+
+# Perform inference on a single model's chain
+summary(mcmcglmm_mod[[1]])
+```
+
+```{r}
+matched_species <- levels(cleaned_data$BirdTree) %in% rownames(inv.phylo$Ainv)
+cleaned_data <- cleaned_data[cleaned_data$BirdTree %in% rownames(inv.phylo$Ainv), ]
+cleaned_data$BirdTree <- droplevels(cleaned_data$BirdTree)
+
+
+mcmcglmm_mod[[chain]] <- MCMCglmm(Alarm_Presence ~ Pre_Bird_Height + SocialGroup, 
+                                   random = ~BirdTree, 
+                                   data = cleaned_data, 
+                                   family = "categorical",
+                                   ginverse = list(BirdTree = inv.phylo$Ainv), 
+                                   prior = prior, 
+                                   nitt = 25000, 
+                                   burnin = 5000, 
+                                   thin = 1000, 
+                                   verbose = TRUE, 
+                                   pr = TRUE)
+```
+
+## BRMS
+
+```{r}
 ######brms
 library(brms)
-iter <- 25e3
+liter <- 25e3
 warmup <- 15e3
 thin <- 1e3
 adapt <- 0.99
 chains <- 3
 treedepth <- 11
 
-A2<-ape::vcv.phylo(tree, cor=T) # cor=T is important, means you get correlation matrix from tree as in inverseA()
-brms_mod <- brm(bf( response~ height + social  + 1|gr(species, cov = A)) ) + bernoulli(),
+A2<-ape::vcv.phylo(rooted_tree, cor=T) # cor=T is important, means you get correlation matrix from tree as in inverseA()
+brms_mod <- brm(bf( response~ Pre_Bird_Height + SocialGroup  + 1|gr(BirdTree, cov = A)) ) + bernoulli(),
                   data = df,
                   data2 = list(A=A2),
                   control = list(adapt_delta=adapt, max_treedepth=treedepth),
