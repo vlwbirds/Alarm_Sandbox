@@ -67,7 +67,7 @@ df_sp_thar<-cleaned_data %>% filter(BirdTree=="Thamnomanes_ardesiacus")
 #choose vars
 names(df_sp_thar)
 df_thar<-df_sp_thar %>% ungroup() %>% select(c("Timestamp", "alarm", "Audio_React",
-                                               "TarSpp", "BirdTree", "Tar_Sex", "Pre_Bird_Height", "Flight_apex", "Proximity", "Veg_under_height", "Pre_Bird_Dense")) 
+                                               "Spp", "BirdTree", "Sex", "Pre_Bird_Height", "Flight_apex", "Proximity", "Veg_under_height", "Pre_Bird_Dense")) 
 str(df_thar)
 #tibbles are atrocious to work with
 df_thar<-as.data.frame(df_thar)
