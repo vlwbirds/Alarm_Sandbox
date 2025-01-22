@@ -16,7 +16,7 @@ library(performance)
 library(GGally)
 
 #load tree
-tree<-read.nexus("C:\\Users\\Justin\\Desktop\\Research\\Boterolab\\bird_phylogenies\\AllBirdsHackett1_summary.tre")
+tree<-read.nexus(here("data/trees/AllBirdsHackett1_summary.tre"))
 # Loading Reduced GLM Data
 df <- read_csv(here("data/HwkGLM.csv"))
 

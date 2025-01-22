@@ -2303,7 +2303,6 @@ predictors <- c("Pre_Bird_Height",
                 "Height_Difference",
                 "Veg_under_height",
                 "Veg_mid_low", 
-                "Veg_Under_Avg"
                )  # Specify predictor column names
 interactions <- c("Flight_proximity:Pre_Bird_Height", "Height_Difference:Flight_proximity")  # Define interaction terms if needed
 
@@ -3448,6 +3447,8 @@ for (species in levels(cleaned_data$BirdTree)) {
 
 ```{r}
 ######MCMCglmm
+library(tidyverse)
+library(here)
 library(MCMCglmm)
 library(coda)
 library(ape)
