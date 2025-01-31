@@ -136,8 +136,7 @@ all_summaries <- bind_rows(model_summaries)
 # Compute Delta AAIC and Akaike Weights
 all_summaries <- all_summaries %>%
   group_by(species) %>%
-  mutate(Delta_AAIC = AAIC - min(AAIC),
-         Akaike_weight = exp(-0.5 * Delta_AAIC) / sum(exp(-0.5 * Delta_AAIC))) %>%
+  mutate(Delta_AAIC = AAIC - min(AAIC)) %>%
   ungroup()
 
 str(all_summaries)
@@ -151,9 +150,10 @@ view(read_csv(here("output/GLM_summaries_AAIC.csv")))
 
 # Reshape the model summaries into a table where each row represents a single model
 coef_table <- all_summaries %>%
-  select(species, predictors, term, estimate, p.value, AAIC, Delta_AAIC, Akaike_weight, std.error) %>%
-  pivot_wider(names_from = term, values_from = c(estimate, p.value), names_prefix = "p_") %>%
-  mutate(model_index = row_number()) %>%
+  select(species, predictors, term, p.value, AAIC, Delta_AAIC) %>%
+  pivot_wider(names_from = term, values_from = c( p.value), names_prefix = "p_") %>%
+  mutate(model_index = row_number(),
+         Akaike_weight = exp(-0.5 * Delta_AAIC) / sum(exp(-0.5 * Delta_AAIC))) %>%
   arrange(AAIC)  # Sorting by best model (lowest AAIC)
 view(coef_table)
 # Select the top 10 best-fitted models
@@ -167,13 +167,21 @@ view(read_csv(here("output/Top_10_GLM_Models.csv")))
 # Print the table
 print(top_10_models)
 
-###### TO DO
-# long output, one predictor per row indexed by specific model
+######
 # questions: how to identify a good model, which predictors are important?
 # how do we summarise effects across multiple models?
-# model weight and index needed to link summary table to long table, left join by model index
-# recalculate aaic weight from model summary table "coef_table", right now it's from the long table
-# 
 
-inner_join(all_summaries, coef_table %>% select(c(Akaike_weight, Delta_AAIC, predictors, model_index)), predictors)
+# Add model index to all_summaries based on predictors
+all_summaries <- all_summaries %>%
+  mutate(model_index = match(predictors, coef_table$predictors))
+
+# Merge the long-format all_summaries with coef_table to include AAIC weight
+all_summaries_weighted <- all_summaries %>%
+  left_join(select(coef_table, model_index, Akaike_weight), by = "model_index")
+
+# View the updated table
+view(all_summaries_weighted)
+
+# Save to CSV
+write_csv(all_summaries_weighted, here("output/GLM_summaries_with_weights.csv"))
 
