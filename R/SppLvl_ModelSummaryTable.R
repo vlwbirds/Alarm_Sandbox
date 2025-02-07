@@ -217,13 +217,24 @@ write_csv(all_summaries_weighted, here("output/GLM_summaries_with_weights.csv"))
 all_summaries_filled <- all_summaries_weighted %>%
   complete(model_index, term, fill = list(estimate = 0, std.error = 0))
 
+weighted.var.se <- function(x, w, na.rm=FALSE)
+  #  Computes the variance of a weighted mean following Cochran 1977 definition
+{
+  if (na.rm) { w <- w[i <- !is.na(x)]; x <- x[i] }
+  n = length(w)
+  xWbar = weighted.mean(x,w,na.rm=na.rm)
+  wbar = mean(w)
+  out = n/((n-1)*sum(w)^2)*(sum((w*x-wbar*xWbar)^2)-2*xWbar*sum((w-wbar)*(w*x-wbar*xWbar))+xWbar^2*sum((w-wbar)^2))
+  return(out)
+}
+
 # Calculate weighted means
 weighted_SE <- all_summaries_filled %>% 
   filter(Delta_AAIC < 4) %>% 
   group_by(term) %>% 
   summarise(
-    weighted_estimate = sum(estimate * Akaike_weight, na.rm = TRUE),
-    weighted_SE = sqrt(sum((std.error^2) * Akaike_weight, na.rm = TRUE))
+    weighted_estimate = weighted.mean(estimate, Akaike_weight, na.rm = T),
+    weighted_SE = weighted.mean(std.error, Akaike_weight, na.rm = T)
   ) 
 
 # View results
@@ -233,3 +244,12 @@ view(weighted_SE)
 write_csv(weighted_SE, here("output/weighted_parameter_estimates.csv"))
 
 
+# So you are missing one step in the call to summarise()
+# weighted_estimate = sum(estimate * Akaike_weight, na.rm = TRUE)
+# ...needs to be standardized by the sum of weights, such that ....
+# weighted_estimate = sum(estimate * Akaike_weight, na.rm = TRUE)/sum(Akaike_weight, na.rm=T)
+# 
+# Alternatively, you should be able to use >summarise(we=weighted.mean(x=estimate, w=Akaike_weight)) to get the same result. 
+# Does it? If not, we might be touching on exactly that issue you identified earlier 
+# about the weights not summing to one *after* the filtering to models with delta aicc below 4. 
+# Could you explore that and explain that to me when we meet and have code to show me how it works?
