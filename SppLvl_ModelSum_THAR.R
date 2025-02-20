@@ -53,7 +53,7 @@ df <- HwkGLM %>%
   ), as.numeric)) %>%
   mutate(Height_Difference = Flight_apex - Pre_Bird_Height) %>%
   mutate(across(where(is.numeric) & !c(Alarm_Presence), scale))  # Exclude Alarm_Presence
-view(df)
+# view(df)
 
 # Load dataset into inputdata
 inputdata <- df
@@ -68,8 +68,8 @@ predictors <- c("Tar_Sex",
                 "Height_Difference"
 )
 
-# Set minimum sample size threshold
-min_sample_size <- 30  
+# Define species of interest
+species <- "thar"
 
 # Filter data for the current species
 species_data <- inputdata %>%
@@ -77,12 +77,6 @@ species_data <- inputdata %>%
   filter(rowSums(is.na(select(., all_of(predictors)))) == 0) %>%
   mutate(Alarm_Presence = as.numeric(Alarm_Presence)) %>%  # Ensure numeric
   filter(Alarm_Presence %in% c(0, 1))  # Ensure binary response
-
-# Recheck sample size after filtering
-if (nrow(species_data) > min_sample_size) {
-  cat("Skipping species:", species, "- Sample size after filtering:", nrow(species_data), "\n")
-  next
-}
 
 
 # Initialize a list to store model summaries
@@ -159,7 +153,7 @@ write_csv(all_summaries, here("output/GLM_summaries_AAIC.csv"))
 
 cat("Model summaries saved to 'output/GLM_summaries_AAIC.csv'\n")
 
-view(read_csv(here("output/GLM_summaries_AAIC.csv")))
+# view(read_csv(here("output/GLM_summaries_AAIC.csv")))
 
 # Reshape the model summaries into a table where each row represents a single model
 coef_table <- all_summaries %>%
@@ -168,7 +162,7 @@ coef_table <- all_summaries %>%
   mutate(model_index = row_number(),
          Akaike_weight = exp(-0.5 * Delta_AAIC) / sum(exp(-0.5 * Delta_AAIC))) %>%
   arrange(AAIC)  # Sorting by best model (lowest AAIC)
-view(coef_table)
+# view(coef_table)
 
 # save to csv
 write_csv(coef_table, here("output/GLM_Summary_Table.csv"))
@@ -180,9 +174,9 @@ top_10_models <- coef_table %>%
 # Save to CSV
 write_csv(top_10_models, here("output/Top_10_GLM_Models.csv"))
 
-view(read_csv(here("output/Top_10_GLM_Models.csv")))
+# view(read_csv(here("output/Top_10_GLM_Models.csv")))
 # Print the table
-print(top_10_models)
+# print(top_10_models)
 
 ######
 # questions: how to identify a good model, which predictors are important?
@@ -197,10 +191,10 @@ all_summaries_weighted <- all_summaries %>%
   left_join(select(coef_table, model_index, Akaike_weight), by = "model_index")
 
 # View the updated table
-view(all_summaries_weighted)
+# view(all_summaries_weighted)
 
 # Save to CSV
-write_csv(all_summaries_weighted, here("output/GLM_summaries_with_weights.csv"))
+# write_csv(all_summaries_weighted, here("output/GLM_summaries_with_weights.csv"))
 
 # Take the table number 2 %>%
 #   Filter to delta aicc below 4%>%
@@ -217,17 +211,6 @@ write_csv(all_summaries_weighted, here("output/GLM_summaries_with_weights.csv"))
 all_summaries_filled <- all_summaries_weighted %>%
   complete(model_index, term, fill = list(estimate = 0, std.error = 0))
 
-weighted.var.se <- function(x, w, na.rm=FALSE)
-  #  Computes the variance of a weighted mean following Cochran 1977 definition
-{
-  if (na.rm) { w <- w[i <- !is.na(x)]; x <- x[i] }
-  n = length(w)
-  xWbar = weighted.mean(x,w,na.rm=na.rm)
-  wbar = mean(w)
-  out = n/((n-1)*sum(w)^2)*(sum((w*x-wbar*xWbar)^2)-2*xWbar*sum((w-wbar)*(w*x-wbar*xWbar))+xWbar^2*sum((w-wbar)^2))
-  return(out)
-}
-
 # Calculate weighted means
 weighted_SE <- all_summaries_filled %>% 
   filter(Delta_AAIC < 4) %>% 
@@ -238,18 +221,13 @@ weighted_SE <- all_summaries_filled %>%
   ) 
 
 # View results
-view(weighted_SE)
+# view(weighted_SE)
+
+
+weighted_SE$z.score <- weighted_SE$weighted_estimate/weighted_SE$weighted_SE # calculate z.score
+weighted_SE$p.value <- pnorm(abs(weighted_SE$z.score), lower.tail = F) # calculate p value given a z.score 
+weighted_SE$t.dist <- pt(abs(weighted_SE$z.score), nrow(all_summaries_filled %>% filter(Delta_AAIC < 4))) # calculate p value from a t score, Student t Distribution
 
 # Save to CSV
 write_csv(weighted_SE, here("output/weighted_parameter_estimates.csv"))
 
-
-# So you are missing one step in the call to summarise()
-# weighted_estimate = sum(estimate * Akaike_weight, na.rm = TRUE)
-# ...needs to be standardized by the sum of weights, such that ....
-# weighted_estimate = sum(estimate * Akaike_weight, na.rm = TRUE)/sum(Akaike_weight, na.rm=T)
-# 
-# Alternatively, you should be able to use >summarise(we=weighted.mean(x=estimate, w=Akaike_weight)) to get the same result. 
-# Does it? If not, we might be touching on exactly that issue you identified earlier 
-# about the weights not summing to one *after* the filtering to models with delta aicc below 4. 
-# Could you explore that and explain that to me when we meet and have code to show me how it works?
