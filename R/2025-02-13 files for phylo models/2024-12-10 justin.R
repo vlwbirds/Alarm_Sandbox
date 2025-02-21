@@ -833,6 +833,36 @@ car::vif(lm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+foraging_
           data = output_p_alarm))
 #yeah we are ok
 summary(m1_intersp)
+# Call:
+#   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + 
+#             Trophic.Niche + foraging_stratum_std + mass_ln_std, data = output_p_alarm, 
+#           phy = keep.tip(tree, output_p_alarm$Species3), model = "lambda")
+# 
+# AIC logLik 
+# 115.74 -48.87 
+# 
+# Raw residuals:
+#   Min       1Q   Median       3Q      Max 
+# -1.06535  0.04828  0.71939  1.43856  2.08354 
+# 
+# Mean tip height: 83.00898
+# Parameter estimate(s) using ML:
+#   lambda : 1
+# sigma2: 0.008610318 
+# 
+# Coefficients:
+#                                     Estimate     StdErr  t.value   p.value    
+# (Intercept)                       -4.4441867  0.4105230 -10.8257 6.364e-16 ***
+# SocialGroup_factor_lumped_numeric  0.1247163  0.0421189   2.9610  0.004340 ** 
+# Trophic.NicheGranivore             0.4834120  0.4074847   1.1863  0.240018    
+# Trophic.NicheInvertivore           0.6770238  0.2641659   2.5629  0.012822 *  
+# Trophic.NicheOmnivore              1.1187162  0.3254500   3.4374  0.001054 ** 
+# foraging_stratum_std               0.0848540  0.0707410   1.1995  0.234896    
+# mass_ln_std                        0.0040068  0.0838214   0.0478  0.962028    
+# ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# R-squared: 0.2968	Adjusted R-squared: 0.2287 
 #remove mass
 #                                    Estimate     StdErr  t.value   p.value    
 #mass_ln_std                        0.0013299  0.0838617   0.0159 0.9873984    
@@ -844,8 +874,41 @@ summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+forag
 summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche, 
                 data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda"))
 #the final model has arrived
+#same model parameters from 2024-12-10 as 2025-02-20 but different output. Why?
+#
+# 2025-02-20
+# Call:
+#   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + 
+#             Trophic.Niche, data = output_p_alarm, phy = keep.tip(tree, 
+#                                                                  output_p_alarm$Species3), model = "lambda")
+# 
+# AIC logLik 
+# 113.34 -49.67 
+# 
+# Raw residuals:
+#   Min       1Q   Median       3Q      Max 
+# -1.02304 -0.01439  0.85717  1.47885  2.05876 
+# 
+# Mean tip height: 83.00898
+# Parameter estimate(s) using ML:
+#   lambda : 1
+# sigma2: 0.008812688 
+# 
+# Coefficients:
+#                                    Estimate    StdErr  t.value   p.value    
+# (Intercept)                       -4.387427  0.403500 -10.8734 3.511e-16 ***
+# SocialGroup_factor_lumped_numeric  0.128009  0.041444   3.0887  0.002972 ** 
+# Trophic.NicheGranivore             0.239180  0.342433   0.6985  0.487413    
+# Trophic.NicheInvertivore           0.618782  0.257851   2.3998  0.019326 *  
+# Trophic.NicheOmnivore              1.075928  0.315226   3.4132  0.001118 ** 
+#   ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# R-squared: 0.2802	Adjusted R-squared: 0.2352 
+# 
+# Note: p-values and R-squared are conditional on lambda=1.
 
-
+# 2024-12-10
 # Call:
 #   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + 
 #             Trophic.Niche, data = output_p_alarm, phy = keep.tip(tree, 
