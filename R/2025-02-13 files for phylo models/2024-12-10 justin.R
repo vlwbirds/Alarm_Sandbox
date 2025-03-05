@@ -15,7 +15,7 @@ library(GGally)
 library(phylolm)
 library(gridExtra)
 lines<-theme(axis.line.x.bottom = element_line(),axis.line.y.left = element_line())
-theme_tufte2<-theme_tufte(base_family = "Helvetica")
+#theme_tufte2<-theme_tufte(base_family = "Helvetica")
 
 #load tree
 tree<-read.nexus(here("data/trees/AllBirdsHackett1_summary.tre"))
@@ -429,7 +429,7 @@ summary(mcmcglmm_mod2[[1]])#Nef ~1000 or at least >>100
 # 
 # G-structure:  ~Species3
 # 
-# post.mean l-95% CI u-95% CI eff.samp
+#           post.mean l-95% CI u-95% CI eff.samp
 # Species3    208885     2720   518835    206.2
 # 
 # R-structure:  ~units
@@ -479,12 +479,14 @@ grid.arrange(
   geom_point()+
   geom_violin()+
   geom_boxplot()+
-  theme_tufte2+lines,
+  #theme_tufte2+
+    lines,
   ggplot(cleaned_data, aes(y=abundance_log, x=SocialGroup_factor_lumped, color=SocialGroup_factor_lumped))+
     geom_point()+
     geom_violin()+
     geom_boxplot()+
-    theme_tufte2+lines
+    #theme_tufte2+
+    lines
 )
 #yes we are justified
 cleaned_data$SocialGroup_factor_lumped_numeric<-as.numeric(cleaned_data$SocialGroup_factor_lumped)
@@ -602,7 +604,7 @@ plot(do.call(mcmc.list, lapply(mcmcglmm_mod4, function(m) m$Sol)), ask=F) #nope
 gelman.diag(do.call(mcmc.list,lapply(mcmcglmm_mod4, function(m) m$Sol)))
 # Potential scale reduction factors:
 #   
-#   Point est. Upper C.I.
+#                                       Point est. Upper C.I.
 # (Intercept)                                1.57       2.62
 # Species3.Crotophaga_ani                    1.09       1.14
 # Species3.Brotogeris_cyanoptera             1.12       1.21
@@ -723,6 +725,30 @@ summary(alarm_use_m1)
 #this is converging a whole lot better than the mcmcglmm
 #probably due to the recommended variance partitioning into phylo and non-phylo
 
+# Family: bernoulli 
+# Links: mu = logit 
+# Formula: alarm ~ 1 + (1 | gr(Species3, cov = A)) + (1 | species) 
+# Data: df_msp_clean %>% mutate(species = Species3) (Number of observations: 207) 
+# Draws: 4 chains, each with iter = 25000; warmup = 15000; thin = 10;
+# total post-warmup draws = 4000
+# 
+# Multilevel Hyperparameters:
+#   ~species (Number of levels: 69) 
+# Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# sd(Intercept)     1.64      0.89     0.12     3.52 1.00     3202     3775
+# 
+# ~Species3 (Number of levels: 69) 
+# Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# sd(Intercept)     0.27      0.18     0.02     0.69 1.00     2913     3690
+# 
+# Regression Coefficients:
+#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# Intercept    -2.88      1.41    -6.37    -0.54 1.00     3918     3818
+# 
+# Draws were sampled using sampling(NUTS). For each parameter, Bulk_ESS
+# and Tail_ESS are effective sample size measures, and Rhat is the potential
+# scale reduction factor on split chains (at convergence, Rhat = 1).
+
 #calc phylo signal
 #https://discourse.mc-stan.org/t/phylogenetic-signal-for-bernoulli-families-by-brms/19608/12
 #bernoulli pglmms don't have a sigma term (as Gaussian do), but the principal seems the same
@@ -744,6 +770,78 @@ output_p_alarm=ri %>% filter(grepl(ri$param, pattern="_Species3[", fixed=T)) %>%
   transmute(Species3=gsub(Species3, pattern=",Intercept]", replacement="", fixed=T), 
             p_alarm=p_alarm)
 row.names(output_p_alarm)<-NULL
+
+write_csv(output_p_alarm, here("output/analysis/PhyloAlarmProbability.csv"))
+#                       Species3    p_alarm
+# 1         Ammodramus_aurifrons 0.10470449
+# 2            Attila_bolivianus 0.29755353
+# 3         Baryphthengus_martii 0.01858282
+# 4        Brotogeris_cyanoptera 0.02690657
+# 5                 Cacicus_cela 0.24105210
+# 6      Campephilus_rubricollis 0.01434371
+# 7        Camptostoma_obsoletum 0.09169042
+# 8       Chelidoptera_tenebrosa 0.02850721
+# 9               Crotophaga_ani 0.02328796
+# 10        Cyanocorax_violaceus 0.35812837
+# 11        Cymbilaimus_lineatus 0.18803780
+# 12           Cyphorhinus_arada 0.04057341
+# 13         Dendrocincla_merula 0.01450167
+# 14           Dichrozona_cincta 0.07157980
+# 15         Eubucco_richardsoni 0.01579567
+# 16          Formicarius_analis 0.01990713
+# 17          Galbula_cyanescens 0.01564006
+# 18         Gymnopithys_salvini 0.04765233
+# 19                Habia_rubica 0.30184260
+# 20   Hypocnemoides_maculicauda 0.04865621
+# 21         Laniocera_hypopyrra 0.07377959
+# 22        Lepidothrix_coronata 0.02003363
+# 23         Lipaugus_vociferans 0.04501443
+# 24 Machaeropterus_pyrocephalus 0.01983389
+# 25            Monasa_morphoeus 0.10691829
+# 26           Monasa_nigrifrons 0.04127033
+# 27      Myiodynastes_maculatus 0.16176516
+# 28      Myiozetetes_cayanensis 0.28185586
+# 29            Myrmeciza_fortis 0.07100400
+# 30       Myrmeciza_hemimelaena 0.08859437
+# 31        Myrmeciza_hyperythra 0.04682334
+# 32       Myrmoborus_leucophrys 0.18081317
+# 33      Myrmoborus_myotherinus 0.10674859
+# 34      Myrmotherula_axillaris 0.09122697
+# 35    Myrmotherula_longipennis 0.13302254
+# 36    Myrmotherula_menetriesii 0.07098313
+# 37         Nasica_longirostris 0.01436339
+# 38          Pachyramphus_minor 0.25952711
+# 39          Philydor_pyrrhodes 0.01584583
+# 40    Phlegopsis_nigromaculata 0.05013844
+# 41           Pipra_fasciicauda 0.01799260
+# 42              Pipra_mentalis 0.01933028
+# 43      Platyrinchus_coronatus 0.13892305
+# 44  Platyrinchus_platyrhynchos 0.21509485
+# 45        Pyrocephalus_rubinus 0.09930925
+# 46      Ramphocaenus_melanurus 0.04427064
+# 47           Ramphocelus_carbo 0.22947886
+# 48  Rhegmatorhina_melanosticta 0.04908809
+# 49   Sittasomus_griseicapillus 0.01486703
+# 50     Sporophila_caerulescens 0.11563006
+# 51       Synallaxis_gujanensis 0.01527343
+# 52           Tangara_chilensis 0.10139366
+# 53           Tangara_schrankii 0.10385541
+# 54    Terenotriccus_erythrurus 0.16408731
+# 55      Thamnomanes_ardesiacus 0.17661756
+# 56    Thamnomanes_schistogynus 0.25353416
+# 57       Thamnophilus_aethiops 0.07176510
+# 58    Thamnophilus_schistaceus 0.07015118
+# 59        Thryothorus_leucotis 0.04099675
+# 60 Todirostrum_chrysocrotaphum 0.07026660
+# 61             Trogon_collaris 0.01086816
+# 62              Trogon_curucui 0.01133943
+# 63            Trogon_melanurus 0.01067179
+# 64      Tyranneutes_stolzmanni 0.02477242
+# 65      Tyrannus_melancholicus 0.22008822
+# 66         Veniliornis_affinis 0.01384590
+# 67          Volatinia_jacarina 0.09834256
+# 68    Willisornis_poecilinotus 0.05309964
+# 69      Xiphorhynchus_guttatus 0.01384750
 
 ####################
 #nice now we plot the probability of alarming against intersp variables and put it on a tree

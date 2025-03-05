@@ -68,7 +68,7 @@ predictors <- c("Tar_Sex",
                 "Height_Difference")
 
 # Define species of interest (only haru)
-species <- "thar"
+species <- "haru"
 
 # Filter data for haru
 species_data <- inputdata %>%
@@ -84,7 +84,7 @@ model_summaries <- list()
 cat("Processing species:", species, "- Sample size:", nrow(species_data), "\n")
 
 # Iterate over predictor combinations
-for (num_predictors in 1:3) {
+for (num_predictors in 1:2) {
   predictor_combinations <- combn(predictors, num_predictors, simplify = FALSE)
   
   for (combination in predictor_combinations) {
@@ -165,6 +165,6 @@ weighted_SE$p.value <- pnorm(abs(weighted_SE$z.score), lower.tail = F) # calcula
 weighted_SE$t.dist <- pt(abs(weighted_SE$z.score), nrow(all_summaries_filled %>% filter(Delta_AAIC < 4))) # calculate p value from a t score, Student t Distribution
 
 # Save final weighted results
-write_csv(weighted_SE, here("output/GLM_Weighted_Estimates_THAR.csv"))
+write_csv(weighted_SE, here("output/GLM_Weighted_Estimates_HARU.csv"))
 
-cat("Weighted estimates saved to 'output/GLM_Weighted_Estimates_THAR.csv'\n")
+cat("Weighted estimates saved to 'output/GLM_Weighted_Estimates_HARU.csv'\n")

@@ -1,0 +1,274 @@
+---
+title: "AlarmCallPhylogeny"
+format: html
+editor: visual
+---
+
+## Libraries and Data
+
+```{r}
+library(ape)
+library(castor)
+library(here)
+library(phytools)
+library(tidyverse)
+
+# data sets
+# nex_data is 100 trees
+nex_data <- read.nexus(here("data/trees/MayrAllErickson-tree-pruner-205594f1-a408-4345-b027-64dfdee069f9/output.nex"))
+
+spp_alarm <- read.csv(here("data/spp_alarm.csv"))
+#view(spp_alarm)
+
+p_alarm <- read_csv(here("output/analysis/PhyloAlarmProbability.csv"))
+```
+
+## Consensus Tree
+
+```{r}
+consensus_tree <- consensus(nex_data, p = 0.5)
+plot(consensus_tree, cex = 0.8)
+```
+
+## Alarm Call Phylogeny - Rooted
+
+```{r}
+library(phytools)
+
+# Replace spaces with underscores in species names
+p_alarm$Species3 <- gsub(" ", "_", p_alarm$Species3)
+
+# Prune the tree to include only species present in the alarm data
+pruned_tree <- keep.tip(consensus_tree, p_alarm$Species3)
+
+# Reorder p_alarm data to match pruned_tree$tip.label
+alarm <- p_alarm$p_alarm[match(pruned_tree$tip.label, p_alarm$Species3)]
+
+# Handle NA values
+filtered_indices <- !is.na(alarm)
+alarm <- alarm[filtered_indices]
+pruned_tree <- drop.tip(pruned_tree, pruned_tree$tip.label[!filtered_indices])
+
+# Ensure alignment between alarm vector and tree tips
+names(alarm) <- pruned_tree$tip.label
+
+# Root the tree using an outgroup
+rooted_tree <- root(pruned_tree, outgroup = "Baryphthengus_martii", resolve.root = TRUE)
+
+# Ensure branch lengths exist
+if (is.null(rooted_tree$edge.length)) {
+  rooted_tree$edge.length <- rep(1, nrow(rooted_tree$edge))
+}
+
+# Ensure the tree is ultrametric
+if (!is.ultrametric(rooted_tree)) {
+  rooted_tree <- chronos(rooted_tree)
+}
+
+# Assign uniform branch lengths
+rooted_tree <- compute.brlen(rooted_tree, method = "uniform")
+
+# Run contMap with error checking
+tryCatch({
+  obj <- contMap(rooted_tree, alarm, plot = FALSE, res = 200)
+  plot(setMap(obj, invert = TRUE), fsize = c(0.7, 1), leg.txt = "Alarm Calling Probability", lwd = 3)
+}, error = function(e) {
+  print("Error in contMap:")
+  print(e)
+  print("Checking input data...")
+  print(alarm)
+  print(rooted_tree$tip.label)
+})
+
+```
+
+## Saving Tree as PNG
+
+```{r}
+# Load the here package if not already loaded
+if(!require(here)) install.packages("here")
+library(here)
+
+# Check and create directory if needed
+dir.create(here("figs"), showWarnings = FALSE)
+
+# Open a PNG device with specified dimensions and resolution, and file path
+png(filename = here("figs/phylo_p_alarm_contmap_1.png"), width = 5000, height = 8000, res = 500)
+
+# Run contMap with error checking and plot
+tryCatch({
+  print("Running contMap...")
+  obj <- contMap(rooted_tree, alarm, plot = FALSE, res = 200)
+  print("contMap finished.")
+  plot(setMap(obj, invert = TRUE), fsize = c(0.7, 1), leg.txt = "Alarm Calling Probability", lwd = 3)
+}, error = function(e) {
+  print("Error in contMap:")
+  print(e)
+  print("Checking input data...")
+  print(alarm)
+  print(rooted_tree$tip.label)
+})
+
+# Close the PNG device if open
+if (dev.cur() != 1) dev.off()
+
+```
+
+```{r}
+# Custom colors for labels: red for species with alarms, black otherwise
+label_colors <- ifelse(alarm > 0, "red", "black")
+# Run contMap with error checking
+tryCatch({
+  obj <- contMap(rooted_tree, alarm, plot = FALSE, res = 500)
+ plot(setMap(obj, invert = TRUE), fsize = c(0.8, 1), tip.color = label_colors, leg.txt = "Alarm Calling", lwd = 2, type = "fan", margin = c(1, 1, 1, 1))
+  nodelabels(pch = 20, col = label_colors, cex = 0) # Add red labels for species with alarms
+  tiplabels(pch = 20, col = label_colors, cex = 1)
+}, error = function(e) {
+  print("Error in contMap:")
+  print(e)
+  print("Checking input data...")
+  print(alarm)
+  print(rooted_tree$tip.label)
+})
+
+# Run contMap with error checking
+tryCatch({
+  obj <- contMap(rooted_tree, alarm, plot = FALSE, res = 200)
+  plot(setMap(obj, invert = TRUE), fsize = c(0.7, 1), tip.color = label_colors, leg.txt = "Alarm Calling Probability", lwd = 2, margin = c(1, 1, 1, 1))
+  nodelabels(pch = 20, col = label_colors, cex = 0) # Add red labels for species with alarms
+  tiplabels(pch = 20, col = label_colors, cex = 1)
+}, error = function(e) {
+  print("Error in contMap:")
+  print(e)
+  print("Checking input data...")
+  print(alarm)
+  print(rooted_tree$tip.label)
+})
+
+```
+
+```{r}
+# Assuming p_alarm is a data frame with a column "Trophic.Niche" that contains categories (e.g., "Frugivore", "Granivore", "Insectivore", "Omnivore")
+# and a column "species" with the species names.
+
+# Initialize an empty vector to store the species with their life history and symbol
+species_with_lifehistory <- vector("list", length = nrow(p_alarm))
+
+# Define the symbols for each trophic niche
+symbol_map <- list(
+  "Frugivore" = "🍇",   # Fruit symbol for frugivores
+  "Granivore" = "🌾",    # Grain symbol for granivores
+  "Invertivore" = "🦗",  # Insect symbol for insectivores
+  "Omnivore" = "🍴"     # Fork/knife symbol for omnivores
+)
+
+# Loop through each species in p_alarm to assign a symbol based on the Trophic.Niche
+for(i in 1:nrow(p_alarm)) {
+  species_name <- p_alarm$species[i]            # Get species name
+  trophic_niche <- p_alarm$Trophic.Niche[i]     # Get trophic niche
+  
+  # Assign the appropriate symbol based on the Trophic.Niche
+  if(trophic_niche %in% names(symbol_map)) {
+    species_with_lifehistory[[i]] <- paste(species_name, symbol_map[[trophic_niche]])
+  } else {
+    species_with_lifehistory[[i]] <- paste(species_name, "Unknown Trophic Niche")
+  }
+}
+
+# Convert the list to a named vector (for convenience)
+species_with_lifehistory <- unlist(species_with_lifehistory)
+
+# Print the resulting species with their life history and symbols
+print(species_with_lifehistory)
+
+```
+
+```{r}
+library(phytools)
+
+# Replace spaces with underscores in species names for both p_alarm and the tree
+p_alarm$Species3 <- gsub(" ", "_", p_alarm$Species3)
+consensus_tree$tip.label <- gsub(" ", "_", consensus_tree$tip.label)
+
+# Define the text labels for each trophic niche
+trophic_niche_map <- list(
+  "Frugivore" = "🍇 Frugivore",
+  "Granivore" = "🌾 Granivore",
+  "Invertivore" = "🦗 Insectivore",
+  "Omnivore" = "🍴 Omnivore"
+)
+
+# Loop through each species in p_alarm to assign a label based on the Trophic.Niche
+species_with_lifehistory <- vector("list", length = nrow(p_alarm))
+
+for(i in 1:nrow(p_alarm)) {
+  species_name <- p_alarm$Species3[i]            # Get species name
+  trophic_niche <- p_alarm$Trophic.Niche[i]      # Get trophic niche
+  
+  # Assign the appropriate label based on the Trophic.Niche
+  if(trophic_niche %in% names(trophic_niche_map)) {
+    species_with_lifehistory[[i]] <- paste(species_name, trophic_niche_map[[trophic_niche]])
+  } else {
+    species_with_lifehistory[[i]] <- paste(species_name, "[Unknown Trophic Niche]")
+  }
+}
+
+# Convert the list to a named vector (for convenience)
+species_with_lifehistory <- unlist(species_with_lifehistory)
+
+# Update Species3 in p_alarm to include the life history labels
+p_alarm$Species3 <- species_with_lifehistory
+
+# Now, modify the tree's tip.label to include the same life history labels
+matching_species <- match(consensus_tree$tip.label, p_alarm$Species3)
+consensus_tree$tip.label <- species_with_lifehistory[matching_species]
+
+# Prune the tree to include only species present in the alarm data
+pruned_tree <- keep.tip(consensus_tree, p_alarm$Species3)
+
+# Reorder p_alarm data to match pruned_tree$tip.label
+alarm <- p_alarm$p_alarm[match(pruned_tree$tip.label, p_alarm$Species3)]
+
+# Handle NA values
+filtered_indices <- !is.na(alarm)
+alarm <- alarm[filtered_indices]
+pruned_tree <- drop.tip(pruned_tree, pruned_tree$tip.label[!filtered_indices])
+
+# Ensure alignment between alarm vector and tree tips
+names(alarm) <- pruned_tree$tip.label
+
+# Root the tree using an outgroup
+rooted_tree <- root(pruned_tree, outgroup = "Baryphthengus_martii", resolve.root = TRUE)
+
+# Ensure branch lengths exist
+if (is.null(rooted_tree$edge.length)) {
+  rooted_tree$edge.length <- rep(1, nrow(rooted_tree$edge))
+}
+
+# Ensure the tree is ultrametric
+if (!is.ultrametric(rooted_tree)) {
+  rooted_tree <- chronos(rooted_tree)
+}
+
+# Assign uniform branch lengths
+rooted_tree <- compute.brlen(rooted_tree, method = "uniform")
+
+# Run contMap with error checking
+tryCatch({
+  obj <- contMap(rooted_tree, alarm, plot = FALSE, res = 200)
+  
+  # Plot the tree with life history labels (no boxes around the text)
+  plot(setMap(obj, invert = TRUE), fsize = c(0.7, 1), leg.txt = "Alarm Calling Probability", lwd = 3)
+  
+  # Adjusting the tip labels without boxes or backgrounds
+  tiplabels(text = rooted_tree$tip.label, adj = c(0.5, -0.5), cex = 0.7, frame = "none", bg = NULL)
+  
+}, error = function(e) {
+  print("Error in contMap:")
+  print(e)
+  print("Checking input data...")
+  print(alarm)
+  print(rooted_tree$tip.label)
+})
+
+```
