@@ -20,7 +20,7 @@ nex_data <- read.nexus(here("data/trees/MayrAllErickson-tree-pruner-205594f1-a40
 spp_alarm <- read.csv(here("data/spp_alarm.csv"))
 #view(spp_alarm)
 
-p_alarm <- read_csv(here("output/analysis/PhyloAlarmProbability.csv"))
+p_alarm <- read_csv(here("output/analysis/PhyloAlarmProbability_All.csv"))
 ```
 
 ## Consensus Tree
@@ -53,7 +53,7 @@ pruned_tree <- drop.tip(pruned_tree, pruned_tree$tip.label[!filtered_indices])
 names(alarm) <- pruned_tree$tip.label
 
 # Root the tree using an outgroup
-rooted_tree <- root(pruned_tree, outgroup = "Baryphthengus_martii", resolve.root = TRUE)
+rooted_tree <- root(pruned_tree, outgroup = "Penelope_jacquacu", resolve.root = TRUE)
 
 # Ensure branch lengths exist
 if (is.null(rooted_tree$edge.length)) {
@@ -93,7 +93,7 @@ library(here)
 dir.create(here("figs"), showWarnings = FALSE)
 
 # Open a PNG device with specified dimensions and resolution, and file path
-png(filename = here("figs/phylo_p_alarm_contmap_1.png"), width = 5000, height = 8000, res = 500)
+png(filename = here("figs/phylo_p_alarm_contmap_all.png"), width = 5000, height = 8000, res = 500)
 
 # Run contMap with error checking and plot
 tryCatch({

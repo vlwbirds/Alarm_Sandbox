@@ -27,6 +27,12 @@ df <- read_csv(here("data/HwkGLM.csv"))
 target_individual_responses<-df %>% group_by(Timestamp) %>% slice(1)
 target_individual_responses$BirdTree<-gsub(" ", "_", target_individual_responses$BirdTree)
 
+
+targetsp_df<-df %>% group_by(ts) %>% slice(1) # this is the highgrade data
+timestamps_where_target_didnt_respond<-targetsp_df %>% filter(response==0) %$% ts
+viable_nontarget_trials<-df %>% filter(ts %in% timestamps_where_target_didnt_respond) %>% group_by(ts) %>% slice(-1) #not sure if slice(-1) works but the idea is to get all rows in that ts' block of rows that are not the target species
+expanded_dataset<-rbind(targetsp_df, viable_nontarget_trials)
+
 cleaned_data<-target_individual_responses
 
 pruned_tree <- keep.tip(tree, cleaned_data$BirdTree)
@@ -193,7 +199,7 @@ for(i in 7){df_msp[,i]<-as.numeric(df_msp[,i])}
 #double check if there is row-level info in the full data set that could help salvage the NAs in the reduced
 df_msp %>% filter(!complete.cases(.)) #NA in prebird height in ts 240709-095534
 bad_msp_experiments<-df_msp %>% filter(!complete.cases(.)) %$% Timestamp
-View(df %>% filter(Timestamp %in% bad_msp_experiments))
+#View(df %>% filter(Timestamp %in% bad_msp_experiments))
 #to me it looks like the NA is legit.... Vince should confirm this
 #exclude NAs as the mcmcglmm models cannot tolerate NAs (unlike the GLMs used above)
 df_msp<-df_msp %>% filter(complete.cases(.)) #NA in prebird height in ts 240709-095534
@@ -262,10 +268,10 @@ ggpairs(df_msp_clean %>% select(c("alarm", "Tar_Sex", "Pre_Bird_Height_ln_std","
 
 
 full_model<-glm(alarm~Tar_Sex+Pre_Bird_Height_ln_std+
-    SocialGroup+Trophic.Niche+foraging_stratum_std+Mass_ln_std+res_ad_std, data =df_msp_clean )
+                  SocialGroup+Trophic.Niche+foraging_stratum_std+Mass_ln_std+res_ad_std, data =df_msp_clean )
 #doesnt fit, maybe too many (99) NAs from eye variable
 full_model_noeyes<-glm(alarm~Tar_Sex+Pre_Bird_Height_ln_std+
-                  SocialGroup+Trophic.Niche+foraging_stratum_std+Mass_ln_std, data =df_msp_clean )
+                         SocialGroup+Trophic.Niche+foraging_stratum_std+Mass_ln_std, data =df_msp_clean )
 #models fit, now evaluate collinearity assumption
 check_collinearity(full_model_noeyes)
 # 
@@ -307,152 +313,6 @@ check_collinearity(full_model_noeyes)
 
 
 
-#######################now from that plausible glm, we now adjust the correlation structure to account for phylogenetic relatedness and repeated sampling within species
-#so we go from fitting glms to pglmms
-#we can first try this in mcmcglmm which people like because it gives you bayesian pvalues in the output
-#if that doesnt work we can do it in brms
-inv.phylo <- inverseA(keep.tip(tree, df_msp_clean$Species3),nodes="TIPS",scale=TRUE)
-
-mcmcglmm_mod <- list()
-for (chain in 1:3) {
-  mcmcglmm_mod[[chain]] <- MCMCglmm(
-    alarm ~ Tar_Sex+Pre_Bird_Height_ln_std + SocialGroup,
-    random=~Species3,
-    data = df_msp_clean,
-    family = "categorical",
-    ginverse = list(Species3 = inv.phylo$Ainv),
-    prior = prior <- list(G = list(G1 = list(V = 1, nu = 0.002)),
-                          R = list(V = 1, nu = 0.002)),
-    nitt = 60000,
-    burnin = 10000,
-    thin = 50,
-    verbose = TRUE
-  )
-}
-
-saveRDS(mcmcglmm_mod, here("output/models/mcmcglmm_mod.rds"))
-par(mfrow=c(13,2), mar=c(2,2,1,2))
-plot(do.call(mcmc.list, lapply(mcmcglmm_mod, function(m) m$Sol)), ask=F) #yep
-gelman.diag(do.call(mcmc.list,lapply(mcmcglmm_mod, function(m) m$Sol)))
-gelman.diag(do.call(mcmc.list,lapply(mcmcglmm_mod, function(m) m$Sol)))$psrf[,1] %>% range # all below 1.0033758
-summary(mcmcglmm_mod[[1]])#Nef ~1000
-
-# Iterations = 10001:59951
-# Thinning interval  = 50
-# Sample size  = 1000 
-# 
-# DIC: 2.275227 
-# 
-# G-structure:  ~Species3
-# 
-#          post.mean l-95% CI u-95% CI eff.samp
-# Species3     61672 0.001211   204831    236.7
-# 
-# R-structure:  ~units
-# 
-#       post.mean l-95% CI u-95% CI eff.samp
-# units     90870    28258   177610    167.2
-# 
-# Location effects: alarm ~ Tar_Sex + Pre_Bird_Height_ln_std + SocialGroup 
-# 
-#                        post.mean  l-95% CI  u-95% CI eff.samp  pMCMC    
-# (Intercept)            -16380.76 -29149.21  -1353.75    2.111  0.004 ** 
-# Tar_Sexm                  -85.31   -265.20     65.51 1000.000  0.312    
-# Tar_Sexu                 -183.10   -450.11     34.02  845.180  0.128    
-# Pre_Bird_Height_ln_std     25.50    -49.83    134.05  648.055  0.568    
-# SocialGrouplek           7127.85 -14589.33  24067.43    1.363  0.700    
-# SocialGroupmsf          16280.24   1365.04  29042.65    2.131  0.002 ** 
-# SocialGrouppair         16033.16   1135.23  28852.19    2.128  0.004 ** 
-# SocialGroupsolo         15895.46   1310.01  28880.88    2.157  0.006 ** 
-# SocialGroupssf          16354.49   2135.41  29902.14    2.122 <0.001 ***
-#   ---
-#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
-
-df_msp_clean %>% count(SocialGroup, alarm)
-# 
-# SocialGroup alarm  n
-# 1          ant     0  6
-# 2          lek     0 15
-# 3          msf     0 47
-# 4          msf     1 36
-# 5         pair     0 36
-# 6         pair     1  6
-# 7         solo     0 44
-# 8         solo     1  3
-# 9          ssf     0  7
-# 10         ssf     1  7
-#full separation visible in ant and lek, so we should lump
-
-df_msp_clean$SocialGroup_lumped<-df_msp_clean$SocialGroup
-df_msp_clean$SocialGroup_lumped[df_msp_clean$SocialGroup_lumped=="ant"]<-"msf"
-df_msp_clean$SocialGroup_lumped[df_msp_clean$SocialGroup_lumped=="lek"]<-"ssf"
-df_msp_clean %>% count(SocialGroup_lumped, alarm)
-# SocialGroup_lumped alarm  n
-# 1                msf     0 53
-# 2                msf     1 36
-# 3               pair     0 36
-# 4               pair     1  6
-# 5               solo     0 44
-# 6               solo     1  3
-# 7                ssf     0 22
-# 8                ssf     1  7
-#we have solved the issue of full separation
-
-mcmcglmm_mod2 <- list()
-for (chain in 1:4) {
-  mcmcglmm_mod2[[chain]] <- MCMCglmm(
-    alarm ~ Tar_Sex+Pre_Bird_Height_ln_std + SocialGroup_lumped,
-    random=~Species3,
-    data = df_msp_clean,
-    family = "categorical",
-    ginverse = list(Species3 = inv.phylo$Ainv),
-    prior = prior <- list(G = list(G1 = list(V = 1, nu = 0.002)),
-                          R = list(V = 1, nu = 0.002)),
-    nitt = 60000,
-    burnin = 10000,
-    thin = 50,
-    verbose = TRUE,
-  )
-}
-saveRDS(mcmcglmm_mod2, here("output/models/mcmcglmm_mod2.rds"))
-par(mfrow=c(5,2), mar=c(2,2,1,2))
-plot(do.call(mcmc.list, lapply(mcmcglmm_mod2, function(m) m$Sol)), ask=F) #yep
-gelman.diag(do.call(mcmc.list,lapply(mcmcglmm_mod2, function(m) m$Sol)))
-gelman.diag(do.call(mcmc.list,lapply(mcmcglmm_mod2, function(m) m$Sol)))$psrf[,1] %>% range # all below 1.0033758
-summary(mcmcglmm_mod2[[1]])#Nef ~1000 or at least >>100
-
-# Iterations = 10001:59951
-# Thinning interval  = 50
-# Sample size  = 1000 
-# 
-# DIC: 2.272355 
-# 
-# G-structure:  ~Species3
-# 
-#           post.mean l-95% CI u-95% CI eff.samp
-# Species3    208885     2720   518835    206.2
-# 
-# R-structure:  ~units
-# 
-# post.mean l-95% CI u-95% CI eff.samp
-# units     82332    26400   151497      228
-# 
-# Location effects: alarm ~ Tar_Sex + Pre_Bird_Height_ln_std + SocialGroup_lumped 
-# 
-#                        post.mean  l-95% CI  u-95% CI eff.samp pMCMC   
-# (Intercept)            -322.6771 -952.4835  215.1067    499.2 0.212   
-# Tar_Sexm               -116.5188 -295.1277   43.3023   1000.0 0.166   
-# Tar_Sexu               -134.6686 -395.8136  190.5823   1000.0 0.342   
-# Pre_Bird_Height_ln_std   40.2275  -59.5990  145.8167    879.8 0.412   
-# SocialGroup_lumpedpair -198.5215 -437.0681    0.3518    872.1 0.054 . 
-# SocialGroup_lumpedsolo -316.6627 -592.4230  -49.2901    483.0 0.004 **
-# SocialGroup_lumpedssf   -18.4429 -325.3699  263.6359   1117.8 0.878   
-# ---
-#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
-#technically, this is interpretable and makes biological sense -- there's a strong effect of social strategy on response probability, 
-#even though in this model, we don't have any meaningful ecological variables...
-
-#however, the SEs of the parameters are terrible, usually indicating poor mixing, correlated variables but that isn't the case, hmm....
 
 df_msp_clean %>% count(Tar_Sex, alarm)
 #good separation on sex
@@ -474,12 +334,12 @@ cleaned_data$SocialGroup_factor_lumped[cleaned_data$SocialGroup_factor_lumped=="
 cleaned_data$SocialGroup_factor_lumped[cleaned_data$SocialGroup_factor_lumped=="lek"]<-"ssf"
 cleaned_data$SocialGroup_factor_lumped<-factor(cleaned_data$SocialGroup_factor_lumped, levels = c("solo", "pair", "ssf", "msf"))
 #are we justified in using the rank of these lumped groups as a social gradient?
-grid.arrange(
+social_plot <- grid.arrange(
   ggplot(cleaned_data, aes(y=abundance_log, x=SocialGroup_factor_lumped, color=SocialGroup_factor))+
-  geom_point()+
-  geom_violin()+
-  geom_boxplot()+
-  #theme_tufte2+
+    geom_point()+
+    geom_violin()+
+    geom_boxplot()+
+    #theme_tufte2+
     lines,
   ggplot(cleaned_data, aes(y=abundance_log, x=SocialGroup_factor_lumped, color=SocialGroup_factor_lumped))+
     geom_point()+
@@ -488,6 +348,8 @@ grid.arrange(
     #theme_tufte2+
     lines
 )
+
+
 #yes we are justified
 cleaned_data$SocialGroup_factor_lumped_numeric<-as.numeric(cleaned_data$SocialGroup_factor_lumped)
 cor.test(cleaned_data$SocialGroup_factor_lumped_numeric, cleaned_data$abundance_log)
@@ -713,13 +575,13 @@ source(here("R/2025-02-13 files for phylo models/my_logihist.R"))
 
 library(brms)
 alarm_use_m1 <- brm(bf(alarm ~ 1 + (1|gr(Species3, cov = A)) + (1|species)) 
-                   + bernoulli(), 
-                   data = df_msp_clean %>% mutate(species=Species3),
-                   data2 = list(A=ape::vcv.phylo(keep.tip(tree, df_msp_clean$Species3))),
-                   control = list(adapt_delta=adapt, max_treedepth=treedepth),
-                   sample_prior = TRUE, save_pars(group = FALSE),
-                   chains = chains, cores=cores, iter = iter, warmup = warmup, thin = thin,
-                   file =  here("output/models/brms_intercept_mod.rds"))
+                    + bernoulli(), 
+                    data = df_msp_clean %>% mutate(species=Species3),
+                    data2 = list(A=ape::vcv.phylo(keep.tip(tree, df_msp_clean$Species3))),
+                    control = list(adapt_delta=adapt, max_treedepth=treedepth),
+                    sample_prior = TRUE, save_pars(group = FALSE),
+                    chains = chains, cores=cores, iter = iter, warmup = warmup, thin = thin,
+                    file =  here("output/models/brms_intercept_mod.rds"))
 plot(alarm_use_m1)
 summary(alarm_use_m1)
 #this is converging a whole lot better than the mcmcglmm
@@ -771,7 +633,7 @@ output_p_alarm=ri %>% filter(grepl(ri$param, pattern="_Species3[", fixed=T)) %>%
             p_alarm=p_alarm)
 row.names(output_p_alarm)<-NULL
 
-write_csv(output_p_alarm, here("output/analysis/PhyloAlarmProbability_All.csv"))
+write_csv(output_p_alarm, here("output/analysis/PhyloAlarmProbability_Tar.csv"))
 #                       Species3    p_alarm
 # 1         Ammodramus_aurifrons 0.10470449
 # 2            Attila_bolivianus 0.29755353
@@ -845,7 +707,13 @@ write_csv(output_p_alarm, here("output/analysis/PhyloAlarmProbability_All.csv"))
 
 ####################
 #nice now we plot the probability of alarming against intersp variables and put it on a tree
-
+foraging_strategy <- read_csv(here("data/ForagingStrategy.csv"))
+foraging_strategy$BirdTree<-gsub(" ", "_", foraging_strategy$BirdTree)
+# Ensure the column names match for joining
+foraging_strategy <- foraging_strategy %>% rename(Species3 = BirdTree)
+# Perform the left join to keep all species from output_p_alarm
+output_p_alarm <- output_p_alarm %>%
+  left_join(foraging_strategy, by = "Species3")
 species_level_data<-df_msp_clean %>% group_by(Species3) %>% slice(1) %>% select(c(1,2,6:11))
 output_p_alarm<-left_join(output_p_alarm, species_level_data)
 output_p_alarm$SocialGroup_factor<-factor(output_p_alarm$SocialGroup, levels = c("solo", "ant" , "lek","pair", "ssf", "msf"))
@@ -856,7 +724,8 @@ output_p_alarm$SocialGroup_factor_lumped<-factor(output_p_alarm$SocialGroup_fact
 
 ggplot(output_p_alarm, aes(y=p_alarm, x=SocialGroup_factor, color=SocialGroup_factor))+
   geom_violin()+geom_boxplot()+geom_point()
-ggplot(output_p_alarm, aes(y=p_alarm, x=SocialGroup_factor_lumped, color=SocialGroup_factor))+geom_violin()+geom_boxplot()+geom_point()
+social_lump_plot <- ggplot(output_p_alarm, aes(y=p_alarm, x=SocialGroup_factor_lumped, color=SocialGroup_factor))+geom_violin()+geom_boxplot()+geom_jitter()+geom_point()
+ggsave(here("figs/SocialGroup_Lump_Plot.png"), plot = social_lump_plot)
 row.names(output_p_alarm)<-output_p_alarm$Species3
 output_p_alarm$p_alarm_ln<-log(output_p_alarm$p_alarm)
 output_p_alarm$SocialGroup_factor_lumped_numeric<-as.numeric(output_p_alarm$SocialGroup_factor_lumped)
@@ -925,10 +794,10 @@ output_p_alarm$mass_ln_std<-as.numeric(scale(log(output_p_alarm$Mass)))
 output_p_alarm$foraging_stratum_std<-as.numeric(scale(output_p_alarm$foraging_stratum))
 
 m1_intersp<-phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+foraging_stratum_std+mass_ln_std, 
-                data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda")
+                    data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda")
 check_collinearity(m1_intersp)
 car::vif(lm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+foraging_stratum_std+mass_ln_std, 
-          data = output_p_alarm))
+            data = output_p_alarm))
 #yeah we are ok
 summary(m1_intersp)
 # Call:
@@ -965,7 +834,7 @@ summary(m1_intersp)
 #                                    Estimate     StdErr  t.value   p.value    
 #mass_ln_std                        0.0013299  0.0838617   0.0159 0.9873984    
 summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+foraging_stratum_std, 
-        data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda"))
+                data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda"))
 #remove foraging stratum
 #                                   Estimate     StdErr  t.value   p.value    
 #foraging_stratum_std               0.083336  0.069400   1.2008 0.2343185    
@@ -1025,7 +894,7 @@ summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche,
 # sigma2: 0.008815904 
 # 
 # Coefficients:
-#                                       Estimate    StdErr  t.value   p.value    
+#                                    Estimate    StdErr  t.value   p.value    
 # (Intercept)                       -4.381155  0.403573 -10.8559 3.756e-16 ***
 # SocialGroup_factor_lumped_numeric  0.126525  0.041451   3.0524 0.0033044 ** 
 # Trophic.NicheGranivore             0.197042  0.342495   0.5753 0.5670958    
@@ -1038,14 +907,244 @@ summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche,
 # 
 # Note: p-values and R-squared are conditional on lambda=1.
 
+summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+Foraging.Strategy.y, 
+                data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda"))
+
+# Call:
+#   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + 
+#             Trophic.Niche + Foraging.Strategy.y, data = output_p_alarm, 
+#           phy = keep.tip(tree, output_p_alarm$Species3), model = "lambda")
+# 
+# AIC logLik 
+# 104.6  -41.3 
+# 
+# Raw residuals:
+#   Min       1Q   Median       3Q      Max 
+# -1.46145 -0.03854  0.68155  1.36806  2.26360 
+# 
+# Mean tip height: 83.00898
+# Parameter estimate(s) using ML:
+#   lambda : 1
+# sigma2: 0.006914214 
+# 
+# Coefficients:
+#   Estimate    StdErr  t.value   p.value    
+# (Intercept)                       -4.472815  0.373339 -11.9806 < 2.2e-16 ***
+# SocialGroup_factor_lumped_numeric  0.112511  0.038913   2.8914  0.005335 ** 
+# Trophic.NicheGranivore             0.251824  0.363331   0.6931  0.490921    
+# Trophic.NicheInvertivore           0.561324  0.241715   2.3223  0.023630 *  
+# Trophic.NicheOmnivore              1.002587  0.289925   3.4581  0.001007 ** 
+# Foraging.Strategy.yground         -0.063208  0.180666  -0.3499  0.727668    
+# Foraging.Strategy.yhop             0.725950  0.391412   1.8547  0.068556 .  
+# Foraging.Strategy.yprobe          -0.395970  0.329343  -1.2023  0.233970    
+# Foraging.Strategy.ysally           0.721134  0.226836   3.1791  0.002337 ** 
+#   ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# R-squared: 0.4353	Adjusted R-squared:  0.36 
+# 
+# Note: p-values and R-squared are conditional on lambda=1.
+
+# potential fix for colinear categorical variables:smash columns together so they all become uniquely categorical
+
+summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Foraging.Strategy.y, 
+                data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda"))
+# Call:
+#   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + 
+#             Foraging.Strategy.y, data = output_p_alarm, phy = keep.tip(tree, 
+#                                                                        output_p_alarm$Species3), model = "lambda")
+# 
+# AIC logLik 
+# 113.4  -48.7 
+# 
+# Raw residuals:
+#   Min      1Q  Median      3Q     Max 
+# -1.4562 -0.1732  0.6844  1.3803  2.4522 
+# 
+# Mean tip height: 83.00898
+# Parameter estimate(s) using ML:
+#   lambda : 1
+# sigma2: 0.008567767 
+# 
+# Coefficients:
+#   Estimate    StdErr  t.value   p.value    
+# (Intercept)                       -3.909432  0.362573 -10.7825 6.101e-16 ***
+# SocialGroup_factor_lumped_numeric  0.107602  0.041917   2.5670  0.012645 *  
+# Foraging.Strategy.yground         -0.173892  0.161517  -1.0766  0.285757    
+# Foraging.Strategy.yhop             0.692822  0.421061   1.6454  0.104864    
+# Foraging.Strategy.yprobe          -0.353444  0.349033  -1.0126  0.315107    
+# Foraging.Strategy.ysally           0.777296  0.241205   3.2226  0.002013 ** 
+#   ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# R-squared: 0.3002	Adjusted R-squared: 0.2447 
+# 
+# Note: p-values and R-squared are conditional on lambda=1.
+
+# Fit model with interaction term
+model <- phylolm(p_alarm_ln ~ Foraging.Strategy.y, 
+                 data = output_p_alarm, phy = keep.tip(tree, output_p_alarm$Species3), model = "lambda")
+summary(model)
+
+# Get predicted values including interaction
+output_p_alarm$predicted_p_alarm <- exp(predict(model))  # Back-transform log values
+
+# Convert Foraging Strategy to factor if not already
+output_p_alarm$Foraging.Strategy.y <- as.factor(output_p_alarm$Foraging.Strategy.y)
+
+# Plot with correct scaling and interaction
+ggplot(output_p_alarm, aes(x = SocialGroup_factor_lumped_numeric, 
+                           y = predicted_p_alarm, color = Foraging.Strategy.y, group = Foraging.Strategy.y)) +
+  geom_point(size = 3) +  
+  geom_smooth(method = "lm", se = FALSE) +  # Use lines instead of smoothing to match model estimates
+  labs(x = "Social Group", y = "Predicted Alarm Probability", color = "Foraging Strategy",
+       title = "Interaction Effect of Social Group and Foraging Strategy on Alarm Calling") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+# Create a data frame with relevant variables from the model
+# You may need to adjust this depending on your actual dataset structure
+output_p_alarm$Trophic.Niche <- factor(output_p_alarm$Trophic.Niche, 
+                                       levels = c("Granivore", "Invertivore", "Omnivore", "Frugivore"))
+
+library(ggplot2)
+library(dplyr)
+
+# Get the min and max values of p_alarm_ln for each Trophic Niche
+y_limits <- output_p_alarm %>%
+  group_by(Trophic.Niche) %>%
+  summarise(min_p_alarm = min(p_alarm_ln, na.rm = TRUE), 
+            max_p_alarm = max(p_alarm_ln, na.rm = TRUE))
+
+# Create the plot with corrected legend and faceting by Trophic Niche, with custom y-axis limits
+diet_plot <- ggplot(output_p_alarm, aes(x = SocialGroup_factor_lumped_numeric, y = p_alarm_ln, color = Trophic.Niche, group = Trophic.Niche)) +
+  geom_point() +  # Scatter plot for data points
+  geom_jitter(width = 0.1) +  # Add jitter to avoid overlapping
+  geom_smooth(method = "lm", se = FALSE, linetype = "solid") +  # Linear model line
+  theme_minimal() +
+  labs(title = "Phylogenetic Linear Model of Alarm Call Probability",
+       x = "Social Group (Numeric)",
+       y = "Alarm Call Probability (ln)",
+       color = "Trophic Niche") +
+  theme(legend.position = "right") +
+  theme(legend.title = element_text(face = "bold")) +
+  scale_color_manual(values = c("Frugivore" = "purple", 
+                                "Granivore" = "brown", 
+                                "Invertivore" = "darkgreen", 
+                                "Omnivore" = "red")) +
+  facet_grid(Trophic.Niche ~ ., scales = "free_y", space = "free_y") +  # Facet by Trophic Niche with free y-axis
+  scale_y_continuous(labels = scales::label_number(),  # Ensures proper labeling
+                     limits = c(min(y_limits$min_p_alarm), max(y_limits$max_p_alarm)))  # Set y-axis limits
+
+diet_plot
+
+ggsave(here("figs/TrophicPlot.png"), plot = diet_plot)
+
+# Clean the data to remove NAs or non-finite values
+output_p_alarm_clean <- output_p_alarm %>%
+  filter(is.finite(p_alarm))  # Keep only finite values for p_alarm
+
+# Get the min and max values of p_alarm for each Foraging Strategy
+y_limits <- output_p_alarm_clean %>%
+  group_by(Foraging.Strategy.y) %>%
+  summarise(min_p_alarm = min(p_alarm, na.rm = TRUE), 
+            max_p_alarm = max(p_alarm, na.rm = TRUE))
+
+# Create the plot with cleaned data and facetting by Foraging Strategy
+forage_plot <- ggplot(output_p_alarm_clean, aes(x = SocialGroup_factor_lumped_numeric, y = p_alarm, color = Foraging.Strategy.y, group = Foraging.Strategy.y)) +
+  geom_point() +  # Scatter plot for data points
+  geom_jitter(width = 0.1) +  # Add jitter to avoid overlapping
+  geom_smooth(method = "lm", se = FALSE, linetype = "solid") +  # Linear model line
+  theme_minimal() +
+  labs(title = "Linear Model of p_alarm with Social Group and Foraging Strategy",
+       x = "Social Group (Numeric)",
+       y = "Alarm Calls (p_alarm)",
+       color = "Foraging Strategy") +
+  theme(legend.position = "right") +
+  theme(legend.title = element_text(face = "bold")) +
+  scale_color_manual(values = c("probe" = "purple", 
+                                "ground" = "brown", 
+                                "glean" = "darkgreen", 
+                                "sally" = "red",
+                                "hop" = "blue")) +
+  facet_grid(Foraging.Strategy.y ~ ., scales = "free_y", space = "free_y") +  # Facet by Foraging Strategy with free y-axis
+  scale_y_continuous(labels = scales::label_number(),  # Ensures proper labeling
+                     limits = c(min(y_limits$min_p_alarm), max(y_limits$max_p_alarm)))  # Set y-axis limits
 
 
+# Assuming 'Frugivore' should be the label for NA values in the legend
+library(ggplot2)
 
+# Ensure 'Frugivore' is the reference level in 'Trophic.Niche'
+output_p_alarm$Trophic.Niche <- factor(output_p_alarm$Trophic.Niche, 
+                                       levels = c("Frugivore", "Granivore", "Invertivore", "Omnivore"))
 
+library(ggplot2)
 
+# Ensure 'Frugivore' is the reference level in 'Trophic.Niche'
+output_p_alarm$Trophic.Niche[is.na(output_p_alarm$Trophic.Niche)] <- "Frugivore"
 
+# Make 'Frugivore' the first factor level and update the factor levels
+output_p_alarm$Trophic.Niche <- factor(output_p_alarm$Trophic.Niche, 
+                                       levels = c("Frugivore", "Granivore", "Invertivore", "Omnivore"))
 
+# Get the min and max values of p_alarm_ln for each Trophic Niche
+y_limits <- output_p_alarm %>%
+  group_by(Trophic.Niche) %>%
+  summarise(min_p_alarm = min(p_alarm_ln, na.rm = TRUE), 
+            max_p_alarm = max(p_alarm_ln, na.rm = TRUE))
 
+# Create the plot with corrected legend and faceting by Trophic Niche, with custom y-axis limits
+ggplot(output_p_alarm, aes(x = SocialGroup_factor_lumped_numeric, y = p_alarm_ln, color = Trophic.Niche, group = Trophic.Niche)) +
+  geom_point() +  # Scatter plot for data points
+  geom_jitter(width = 0.1) +  # Add jitter to avoid overlapping
+  geom_smooth(method = "lm", se = FALSE, linetype = "solid") +  # Linear model line
+  theme_minimal() +
+  labs(title = "Linear Model of p_alarm_ln with Social Group and Trophic Niche",
+       x = "Social Group (Numeric)",
+       y = "Alarm Call Probability (Log Transformed)",
+       color = "Trophic Niche") +
+  theme(legend.position = "right") +
+  theme(legend.title = element_text(face = "bold")) +
+  scale_color_manual(values = c("Frugivore" = "purple", 
+                                "Granivore" = "brown", 
+                                "Invertivore" = "darkgreen", 
+                                "Omnivore" = "red")) +
+  facet_grid(Trophic.Niche ~ ., scales = "free_y", space = "free_y") +  # Facet by Trophic Niche with free y-axis
+  
+  
+  
+  table(output_p_alarm$SocialGroup_factor_lumped_numeric, output_p_alarm$Foraging.Strategy.y)
+chisq.test(table(output_p_alarm$SocialGroup_factor_lumped_numeric, output_p_alarm$Foraging.Strategy.y))
+library(car)
+model <- lm(p_alarm_ln ~ SocialGroup_factor_lumped_numeric + Trophic.Niche + Foraging.Strategy.y, data = output_p_alarm)
+vif(model)
+
+# Ensure 'Frugivore' is the reference level in 'Trophic.Niche'
+output_p_alarm$Trophic.Niche <- factor(output_p_alarm$Trophic.Niche, 
+                                       levels = c("Frugivore", "Granivore", "Invertivore", "Omnivore"))
+
+# Now, create the plot with ggplot2
+library(ggplot2)
+
+# Create the plot with corrected legend
+socialG_numeric_plot <- ggplot(output_p_alarm, aes(x = SocialGroup_factor_lumped_numeric, y = p_alarm_ln, color = Trophic.Niche)) +
+  geom_point() + # Scatter plot for data points
+  geom_smooth(method = "lm", se = TRUE, color = "black", linetype = "solid") + # Linear model line
+  theme_minimal() +
+  labs(title = "Linear Model of p_alarm_ln with Social Group and Trophic Niche",
+       x = "Social Group (Numeric)",
+       y = "Log of Alarm Calls (p_alarm_ln)",
+       color = "Trophic Niche") +
+  theme(legend.position = "right") +
+  theme(legend.title = element_text(face = "bold")) +
+  scale_color_manual(values = c("Frugivore" = "blue", 
+                                "Granivore" = "red", 
+                                "Invertivore" = "green", 
+                                "Omnivore" = "purple"),
+                     na.value = "blue",   # This handles NA and assigns the color for NA as blue
+                     labels = c("Frugivore", "Granivore", "Invertivore", "Omnivore"))
+ggsave(here("figs/SocialGroup_Continuous_lmPlot.png"), plot = socialG_numeric_plot)
 
 #oops forgot eyes
 output_p_alarm$res_ad_std<-as.numeric(scale(output_p_alarm$res_ad))
@@ -1053,7 +1152,7 @@ output_p_alarm$res_td_std<-as.numeric(scale(output_p_alarm$res_td))
 #gotta take out nas before model will fit
 output_p_alarm_nona<-output_p_alarm %>% filter(complete.cases(.))
 m1_intersp_eyes<-phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+foraging_stratum_std+mass_ln_std+res_td_std+res_ad_std, 
-                    data = output_p_alarm_nona, phy=keep.tip(tree, output_p_alarm_nona$Species3), model="lambda")
+                         data = output_p_alarm_nona, phy=keep.tip(tree, output_p_alarm_nona$Species3), model="lambda")
 check_collinearity(m1_intersp_eyes)
 #pick one
 m1_intersp_eyes<-phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+foraging_stratum_std+mass_ln_std+res_td_std, 
@@ -1068,7 +1167,7 @@ summary(m1_intersp_eyes)
 #                                       Estimate    StdErr  t.value   p.value    
 #mass_ln_std                       -0.057783  0.110712 -0.5219  0.604754    
 summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+foraging_stratum_std+res_td_std, 
-        data = output_p_alarm_nona, phy=keep.tip(tree, output_p_alarm_nona$Species3), model="lambda"))
+                data = output_p_alarm_nona, phy=keep.tip(tree, output_p_alarm_nona$Species3), model="lambda"))
 # Coefficients:
 #                                    Estimate    StdErr t.value   p.value    
 # (Intercept)                       -4.722115  0.486355 -9.7092 5.863e-12 ***
@@ -1091,7 +1190,7 @@ summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche,
 
 ################what if we treat social as discrete from the get go?#############################
 mx_model=phylolm(p_alarm_ln~SocialGroup_factor_lumped+Trophic.Niche+foraging_stratum_std+res_td_std+mass_ln_std, 
-        data = output_p_alarm_nona, phy=keep.tip(tree, output_p_alarm_nona$Species3), model="lambda")
+                 data = output_p_alarm_nona, phy=keep.tip(tree, output_p_alarm_nona$Species3), model="lambda")
 check_collinearity(mx_model)
 #good
 summary(mx_model)
