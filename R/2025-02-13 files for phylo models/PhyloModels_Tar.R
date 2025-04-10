@@ -368,199 +368,6 @@ cor.test(cleaned_data$SocialGroup_factor_lumped_numeric, cleaned_data$abundance_
 df_msp_clean$SocialGroup_lumped<-factor(df_msp_clean$SocialGroup_lumped, levels = c("solo", "pair", "ssf", "msf"))
 df_msp_clean$SocialGroup_lumped_numeric<-as.numeric(df_msp_clean$SocialGroup_lumped)
 
-mcmcglmm_mod3 <- list()
-for (chain in 1:4) {
-  mcmcglmm_mod3[[chain]] <- MCMCglmm(
-    alarm ~ Tar_Sex+Pre_Bird_Height_ln_std + SocialGroup_lumped_numeric,
-    random=~Species3,
-    data = df_msp_clean,
-    family = "categorical",
-    ginverse = list(Species3 = inv.phylo$Ainv),
-    prior = prior <- list(G = list(G1 = list(V = 1, nu = 0.002)),
-                          R = list(V = 1, nu = 0.002)),
-    nitt = 60000,
-    burnin = 10000,
-    thin = 50,
-    verbose = TRUE,
-  )
-}
-saveRDS(mcmcglmm_mod3, here("output/models/mcmcglmm_mod3.rds"))
-par(mfrow=c(13,2), mar=c(2,2,1,2))
-plot(do.call(mcmc.list, lapply(mcmcglmm_mod3, function(m) m$Sol)), ask=F) #yep
-gelman.diag(do.call(mcmc.list,lapply(mcmcglmm_mod3, function(m) m$Sol)))
-gelman.diag(do.call(mcmc.list,lapply(mcmcglmm_mod3, function(m) m$Sol)))$psrf[,1] %>% range # all below 1.0033758
-summary(mcmcglmm_mod3[[1]])#Nef ~1000 or at least >>100
-
-# Iterations = 10001:59951
-# Thinning interval  = 50
-# Sample size  = 1000 
-# 
-# DIC: 2.529092 
-# 
-# G-structure:  ~Species3
-# 
-# post.mean l-95% CI u-95% CI eff.samp
-# Species3    137739     6594   352979    279.6
-# 
-# R-structure:  ~units
-# 
-# post.mean l-95% CI u-95% CI eff.samp
-# units     69369    17137   135058    143.8
-# 
-# Location effects: alarm ~ Tar_Sex + Pre_Bird_Height_ln_std + SocialGroup_lumped_numeric 
-# 
-#                            post.mean l-95% CI u-95% CI eff.samp pMCMC   
-# (Intercept)                  -601.76 -1142.11  -173.80    373.7 0.004 **
-# Tar_Sexm                     -105.58  -256.43    37.86    999.9 0.122   
-# Tar_Sexu                     -124.12  -402.76   114.49   1000.0 0.308   
-# Pre_Bird_Height_ln_std         41.13   -42.50   138.78    658.3 0.348   
-# SocialGroup_lumped_numeric     93.30    32.32   172.69    394.1 0.004 **
-#   ---
-#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
-
-#could run for longer but this result seems decent and plausible
-#increases in social group complexity ranking make it more likely for species to respond to alarm calls
-
-
-
-
-
-
-############################################################################
-######################The two step approach######################################
-############################################################################
-
-
-
-#other alternative, recommendable only if the ecological variables reveal little effect (like Thar seems to show..)..
-#..is to fit an intercept only model (with phylo and rep measure), then extract the random intercepts, and 
-#...do a phylolm of those random slopes -- that reduces the complexity and lets us perhaps avoid some of the ungainly large effect sizes
-#and have a clean phylogeny output where we map the random intercepts onto the phylogeny and color them
-
-mcmcglmm_mod4 <- list()
-for (chain in 1:4) {
-  mcmcglmm_mod4[[chain]] <- MCMCglmm(
-    alarm ~ 1,
-    random=~Species3,
-    data = df_msp_clean,
-    family = "categorical",
-    ginverse = list(Species3 = inv.phylo$Ainv),
-    prior = prior <- list(G = list(G1 = list(V = 1, nu = 0.002)),
-                          R = list(V = 1, nu = 0.002)),
-    nitt = 110000,
-    burnin = 10000,
-    thin = 100,
-    verbose = TRUE,
-    pr=T
-  )
-}
-saveRDS(mcmcglmm_mod4, here("output/models/mcmcglmm_mod4.rds"))
-par(mfrow=c(10,2), mar=c(2,2,1,2))
-plot(do.call(mcmc.list, lapply(mcmcglmm_mod4, function(m) m$Sol)), ask=F) #nope
-gelman.diag(do.call(mcmc.list,lapply(mcmcglmm_mod4, function(m) m$Sol)))
-# Potential scale reduction factors:
-#   
-#                                       Point est. Upper C.I.
-# (Intercept)                                1.57       2.62
-# Species3.Crotophaga_ani                    1.09       1.14
-# Species3.Brotogeris_cyanoptera             1.12       1.21
-# Species3.Todirostrum_chrysocrotaphum       1.10       1.21
-# Species3.Platyrinchus_coronatus            1.25       1.77
-# Species3.Platyrinchus_platyrhynchos        1.37       2.10
-# Species3.Camptostoma_obsoletum             1.13       1.35
-# Species3.Attila_bolivianus                 1.42       2.24
-# Species3.Myiozetetes_cayanensis            1.44       2.27
-# Species3.Myiodynastes_maculatus            1.25       1.79
-# Species3.Tyrannus_melancholicus            1.40       2.18
-# Species3.Pyrocephalus_rubinus              1.14       1.42
-# Species3.Laniocera_hypopyrra               1.11       1.27
-# Species3.Pachyramphus_minor                1.42       2.24
-# Species3.Terenotriccus_erythrurus          1.31       1.93
-# Species3.Lipaugus_vociferans               1.09       1.11
-# Species3.Pipra_fasciicauda                 1.32       2.18
-# Species3.Pipra_mentalis                    1.20       1.57
-# Species3.Machaeropterus_pyrocephalus       1.22       1.64
-# Species3.Lepidothrix_coronata              1.25       1.82
-# Species3.Tyranneutes_stolzmanni            1.17       1.42
-# Species3.Myrmotherula_longipennis          1.35       2.03
-# Species3.Myrmotherula_axillaris            1.17       1.53
-# Species3.Myrmotherula_menetriesii          1.11       1.30
-# Species3.Dichrozona_cincta                 1.12       1.31
-# Species3.Cymbilaimus_lineatus              1.34       2.03
-# Species3.Thamnomanes_ardesiacus            1.46       2.33
-# Species3.Thamnomanes_schistogynus          1.48       2.39
-# Species3.Thamnophilus_schistaceus          1.11       1.29
-# Species3.Thamnophilus_aethiops             1.11       1.28
-# Species3.Myrmeciza_hemimelaena             1.18       1.54
-# Species3.Phlegopsis_nigromaculata          1.10       1.15
-# Species3.Rhegmatorhina_melanosticta        1.09       1.13
-# Species3.Gymnopithys_salvini               1.08       1.12
-# Species3.Willisornis_poecilinotus          1.09       1.16
-# Species3.Myrmeciza_hyperythra              1.13       1.28
-# Species3.Hypocnemoides_maculicauda         1.10       1.21
-# Species3.Myrmeciza_fortis                  1.11       1.29
-# Species3.Myrmoborus_leucophrys             1.52       2.49
-# Species3.Myrmoborus_myotherinus            1.25       1.78
-# Species3.Synallaxis_gujanensis             1.12       1.27
-# Species3.Philydor_pyrrhodes                1.10       1.22
-# Species3.Nasica_longirostris               1.10       1.22
-# Species3.Xiphorhynchus_guttatus            1.13       1.33
-# Species3.Sittasomus_griseicapillus         1.11       1.24
-# Species3.Dendrocincla_merula               1.12       1.29
-# Species3.Formicarius_analis                1.08       1.11
-# Species3.Cyanocorax_violaceus              1.45       2.30
-# Species3.Thryothorus_leucotis              1.08       1.10
-# Species3.Cyphorhinus_arada                 1.09       1.11
-# Species3.Ramphocaenus_melanurus            1.09       1.11
-# Species3.Ammodramus_aurifrons              1.16       1.47
-# Species3.Cacicus_cela                      1.48       2.39
-# Species3.Habia_rubica                      1.65       2.82
-# Species3.Volatinia_jacarina                1.14       1.40
-# Species3.Ramphocelus_carbo                 1.52       2.48
-# Species3.Sporophila_caerulescens           1.17       1.52
-# Species3.Tangara_schrankii                 1.16       1.50
-# Species3.Tangara_chilensis                 1.17       1.51
-# Species3.Trogon_curucui                    1.21       1.64
-# Species3.Trogon_melanurus                  1.19       1.56
-# Species3.Trogon_collaris                   1.19       1.58
-# Species3.Baryphthengus_martii              1.11       1.21
-# Species3.Monasa_nigrifrons                 1.09       1.15
-# Species3.Monasa_morphoeus                  1.34       2.01
-# Species3.Chelidoptera_tenebrosa            1.10       1.11
-# Species3.Galbula_cyanescens                1.08       1.16
-# Species3.Eubucco_richardsoni               1.10       1.22
-# Species3.Veniliornis_affinis               1.13       1.32
-# Species3.Campephilus_rubricollis           1.13       1.33
-# 
-# Multivariate psrf
-# 
-# 1.87
-gelman.diag(do.call(mcmc.list,lapply(mcmcglmm_mod4, function(m) m$Sol)))$psrf[,1] %>% range #not converging
-summary(mcmcglmm_mod4[[1]])#Nef very low
-
-# Iterations = 10001:109901
-# Thinning interval  = 100
-# Sample size  = 1000 
-# 
-# DIC: 193.5605 
-# 
-# G-structure:  ~Species3
-# 
-# post.mean l-95% CI u-95% CI eff.samp
-# Species3     28.34    1.825    84.67     18.1
-# 
-# R-structure:  ~units
-# 
-# post.mean l-95% CI u-95% CI eff.samp
-# units     3.988 0.000309    21.43    18.18
-# 
-# Location effects: alarm ~ 1 
-# 
-# post.mean l-95% CI u-95% CI eff.samp pMCMC   
-# (Intercept)   -5.6306 -12.3236  -0.7499    40.84 0.002 **
-#   ---
-#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
-
 ##########################can we get brms on this?###############
 source(here("R/2025-02-13 files for phylo models/my_brms_funs.R"))
 source(here("R/2025-02-13 files for phylo models/my_model_simp_figure.R"))
@@ -706,6 +513,7 @@ foraging_strategy$BirdTree<-gsub(" ", "_", foraging_strategy$BirdTree)
 # Ensure the column names match for joining
 foraging_strategy <- foraging_strategy %>% rename(Species3 = BirdTree)
 # Perform the left join to keep all species from output_p_alarm
+output_p_alarm <- read_csv(here("output/analysis/PhyloAlarmProbability_Tar.csv"))
 output_p_alarm <- output_p_alarm %>%
   left_join(foraging_strategy, by = "Species3")
 species_level_data<-df_msp_clean %>% group_by(Species3) %>% slice(1) %>% select(c(1,2,6:11))
@@ -724,8 +532,18 @@ row.names(output_p_alarm)<-output_p_alarm$Species3
 output_p_alarm$p_alarm_ln<-log(output_p_alarm$p_alarm)
 output_p_alarm$SocialGroup_factor_lumped_numeric<-as.numeric(output_p_alarm$SocialGroup_factor_lumped)
 #what intersp factors matter?
+
+output_p_alarm <- as.data.frame(output_p_alarm)
+row.names(output_p_alarm) <- output_p_alarm$Species3
+
 summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric, 
                 data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3)), model="lambda")
+
+phylolm(p_alarm_ln ~ SocialGroup_factor_lumped_numeric, 
+        data = output_p_alarm, 
+        phy = keep.tip(tree, output_p_alarm$Species3), 
+        model = "lambda")
+
 # Call:
 #   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric, 
 #           data = output_p_alarm, phy = keep.tip(tree, output_p_alarm$Species3))
@@ -975,6 +793,73 @@ summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Foraging.Strategy.y
 # 
 # Note: p-values and R-squared are conditional on lambda=1.
 
+# Extract species from tree
+tree_species <- tree$tip.label  
+
+# Extract unique species from data
+data_species <- unique(output_p_alarm$Species3)
+
+# Check for mismatches
+missing_in_tree <- setdiff(data_species, tree_species)
+missing_in_data <- setdiff(tree_species, data_species)
+
+# Print results
+if (length(missing_in_tree) > 0) {
+  cat("Species in data but missing from tree:\n")
+  print(missing_in_tree)
+} else {
+  cat("All data species are present in the tree.\n")
+}
+
+if (length(missing_in_data) > 0) {
+  cat("Species in tree but missing from data:\n")
+  print(missing_in_data)
+} else {
+  cat("All tree species are present in the data.\n")
+}
+
+# Extract species names
+tree_species <- sort(tree$tip.label)
+data_species <- sort(unique(output_p_alarm$Species3))
+
+# Find mismatches
+missing_in_tree <- setdiff(data_species, tree_species)
+missing_in_data <- setdiff(tree_species, data_species)
+
+# Print results
+cat("Species in data but not in tree:\n")
+print(missing_in_tree)
+
+# Prune tree to match data
+pruned_tree <- keep.tip(tree, data_species)
+model_strat_sub <- phylolm(
+  p_alarm_ln ~ SocialGroup_factor_lumped_numeric + Strat.Sub, 
+  data = output_p_alarm, 
+  phy = pruned_tree, 
+  model = "lambda"
+)
+
+summary(model_strat_sub)
+
+output_p_alarm$Strat.Sub <- gsub("_grean","_green",output_p_alarm$Strat.Sub)
+output_p_alarm$Strat.Sub <- gsub(" _bark","_bark",output_p_alarm$Strat.Sub)
+table(output_p_alarm$Strat.Sub)
+model_strat_sub <- phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Strat.Sub, 
+                data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda")
+summary(model_strat_sub)
+
+#redefine the factor with factor command and respecify the factor level for Strat.sub
+#df$subs<-factor(df$subs, level=c('b','a','c')
+#in post hoc 
+#current model has restricted post hoc tests, emmeans
+# todo: step 1: iterate each category to be the intercept, step 2: pairwise comparisons by gleaning p values from a-b, a-c, b-c (will be different), b-d
+library(performance)
+check_collinearity(model_strat_sub)
+
+
+
+model_strat_sub_mass <- phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Strat.Sub+Mass_ln_std, 
+                           data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda")
 # Fit model with interaction term
 model <- phylolm(p_alarm_ln ~ Foraging.Strategy.y, 
                  data = output_p_alarm, phy = keep.tip(tree, output_p_alarm$Species3), model = "lambda")
