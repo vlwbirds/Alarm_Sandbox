@@ -524,7 +524,7 @@ output_p_alarm$SocialGroup_factor_lumped[output_p_alarm$SocialGroup_factor_lumpe
 output_p_alarm$SocialGroup_factor_lumped[output_p_alarm$SocialGroup_factor_lumped=="lek"]<-"ssf"
 output_p_alarm$SocialGroup_factor_lumped<-factor(output_p_alarm$SocialGroup_factor_lumped, levels = c("solo", "pair", "ssf", "msf"))
 
-ggplot(output_p_alarm, aes(y=p_alarm, x=SocialGroup_factor, color=SocialGroup_factor))+
+plot_social <- ggplot(output_p_alarm, aes(y=p_alarm, x=SocialGroup_factor, color=SocialGroup_factor))+
   geom_violin()+geom_boxplot()+geom_point()
 social_lump_plot <- ggplot(output_p_alarm, aes(y=p_alarm, x=SocialGroup_factor_lumped, color=SocialGroup_factor))+geom_violin()+geom_boxplot()+geom_jitter()+geom_point()
 ggsave(here("figs/SocialGroup_Lump_Plot.png"), plot = social_lump_plot)
@@ -539,10 +539,34 @@ row.names(output_p_alarm) <- output_p_alarm$Species3
 summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric, 
                 data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3)), model="lambda")
 
-phylolm(p_alarm_ln ~ SocialGroup_factor_lumped_numeric, 
+# Call:
+#   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric, 
+#           data = output_p_alarm, phy = keep.tip(tree, output_p_alarm$Species3))
+# 
+# AIC logLik 
+# 119.96 -56.98 
+# 
+# Raw residuals:
+#   Min      1Q  Median      3Q     Max 
+# -1.2742 -0.4623  0.6207  1.3423  2.2391 
+# 
+# Mean tip height: 83.00898
+# Parameter estimate(s) using ML:
+#   sigma2: 0.01089198 
+# 
+# Coefficients:
+#                                      Estimate    StdErr t.value   p.value    
+#   (Intercept)                       -3.780452  0.384227 -9.8391 1.232e-14 ***
+#   SocialGroup_factor_lumped_numeric  0.128620  0.044605  2.8835  0.005283 ** 
+#   ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# R-squared: 0.1104	Adjusted R-squared: 0.09712 
+
+summary(phylolm(p_alarm_ln ~ SocialGroup_factor_lumped_numeric, 
         data = output_p_alarm, 
         phy = keep.tip(tree, output_p_alarm$Species3), 
-        model = "lambda")
+        model = "lambda"))
 
 # Call:
 #   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric, 
@@ -793,52 +817,6 @@ summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Foraging.Strategy.y
 # 
 # Note: p-values and R-squared are conditional on lambda=1.
 
-# Extract species from tree
-tree_species <- tree$tip.label  
-
-# Extract unique species from data
-data_species <- unique(output_p_alarm$Species3)
-
-# Check for mismatches
-missing_in_tree <- setdiff(data_species, tree_species)
-missing_in_data <- setdiff(tree_species, data_species)
-
-# Print results
-if (length(missing_in_tree) > 0) {
-  cat("Species in data but missing from tree:\n")
-  print(missing_in_tree)
-} else {
-  cat("All data species are present in the tree.\n")
-}
-
-if (length(missing_in_data) > 0) {
-  cat("Species in tree but missing from data:\n")
-  print(missing_in_data)
-} else {
-  cat("All tree species are present in the data.\n")
-}
-
-# Extract species names
-tree_species <- sort(tree$tip.label)
-data_species <- sort(unique(output_p_alarm$Species3))
-
-# Find mismatches
-missing_in_tree <- setdiff(data_species, tree_species)
-missing_in_data <- setdiff(tree_species, data_species)
-
-# Print results
-cat("Species in data but not in tree:\n")
-print(missing_in_tree)
-
-# Prune tree to match data
-pruned_tree <- keep.tip(tree, data_species)
-model_strat_sub <- phylolm(
-  p_alarm_ln ~ SocialGroup_factor_lumped_numeric + Strat.Sub, 
-  data = output_p_alarm, 
-  phy = pruned_tree, 
-  model = "lambda"
-)
-
 summary(model_strat_sub)
 
 output_p_alarm$Strat.Sub <- gsub("_grean","_green",output_p_alarm$Strat.Sub)
@@ -848,17 +826,284 @@ model_strat_sub <- phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Strat.Su
                 data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda")
 summary(model_strat_sub)
 
+# Call:
+#   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + 
+#             Strat.Sub, data = output_p_alarm, phy = keep.tip(tree, output_p_alarm$Species3), 
+#           model = "lambda")
+# 
+# AIC logLik 
+# 104.49 -36.24 
+# 
+# Raw residuals:
+#   Min      1Q  Median      3Q     Max 
+# -1.7028 -0.1138  0.6777  1.1116  2.1973 
+# 
+# Mean tip height: 83.00898
+# Parameter estimate(s) using ML:
+#   lambda : 1
+# sigma2: 0.005971565 
+# 
+# Coefficients:
+#                                    Estimate    StdErr t.value   p.value    
+# (Intercept)                       -4.215151  0.446523 -9.4400 4.219e-13 ***
+# SocialGroup_factor_lumped_numeric  0.096581  0.038224  2.5267 0.0144192 *  
+# Strat.Subglean_fruit               0.159552  0.350868  0.4547 0.6510889    
+# Strat.Subglean_generalist          0.904510  0.517724  1.7471 0.0862036 .  
+# Strat.Subglean_green leaf          0.794616  0.352535  2.2540 0.0282007 *  
+# Strat.Subglean_ground             -0.134877  0.488029 -0.2764 0.7832990    
+# Strat.Subground_green leaf         0.365527  0.359327  1.0173 0.3134868    
+# Strat.Subground_ground             0.089726  0.325040  0.2760 0.7835484    
+# Strat.Subhop_green leaf            1.209358  0.484870  2.4942 0.0156590 *  
+# Strat.Subhover_fruit               0.093122  0.442182  0.2106 0.8339809    
+# Strat.Subprobe_bark               -0.072319  0.378256 -0.1912 0.8490793    
+# Strat.Subsally_air                 1.373730  0.391090  3.5126 0.0008952 ***
+# Strat.Subsally_generalist          0.267409  0.838296  0.3190 0.7509417    
+# Strat.Subsally_green leaf          1.324052  0.403178  3.2840 0.0017831 ** 
+#   ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# R-squared: 0.5123	Adjusted R-squared: 0.397 
+# 
+# Note: p-values and R-squared are conditional on lambda=1.
+
 #redefine the factor with factor command and respecify the factor level for Strat.sub
 #df$subs<-factor(df$subs, level=c('b','a','c')
 #in post hoc 
 #current model has restricted post hoc tests, emmeans
 # todo: step 1: iterate each category to be the intercept, step 2: pairwise comparisons by gleaning p values from a-b, a-c, b-c (will be different), b-d
-library(performance)
+
 check_collinearity(model_strat_sub)
 
+library(phylolm)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(broom)
+
+# Get the full list of Strat.Sub levels
+output_p_alarm$Strat.Sub <- factor(output_p_alarm$Strat.Sub)
+levels_list <- levels(output_p_alarm$Strat.Sub)
+
+# Initialize a data frame to store all pairwise results
+pairwise_results <- data.frame()
+
+# Loop over each level as the reference
+for (ref_level in levels_list) {
+  
+  # Relevel Strat.Sub so current level is the reference
+  df_temp <- output_p_alarm
+  df_temp$Strat.Sub <- relevel(factor(df_temp$Strat.Sub), ref = ref_level)
+  
+  # Prune the tree to match the data
+  phy_temp <- keep.tip(tree, df_temp$Species3)
+  
+  # Fit the phylolm model
+  model <- phylolm(
+    formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + Strat.Sub,
+    data = df_temp,
+    phy = phy_temp,
+    model = "lambda"
+  )
+  
+  # Tidy model output manually from summary
+  model_summary <- summary(model)$coefficients
+  model_tidy <- as.data.frame(model_summary)
+  model_tidy$term <- rownames(model_summary)
+  rownames(model_tidy) <- NULL
+  
+  # Filter for Strat.Sub comparisons (skip intercept and SocialGroup)
+  comp_rows <- model_tidy %>%
+    filter(grepl("^Strat.Sub", term)) %>%
+    mutate(
+      intercept = ref_level,
+      comparison = gsub("Strat.Sub", "", term),
+      contrast = paste0(comparison, " - ", intercept)
+    ) %>%
+    select(contrast, Estimate, StdErr, t.value, p.value)
+  
+  
+  # Append to final results
+  pairwise_results <- bind_rows(pairwise_results, comp_rows)
+  
+  # Inside the for loop
+  if (nrow(comp_rows) > 0) {
+    pairwise_results <- bind_rows(pairwise_results, comp_rows)
+  }
+  
+}
+
+if (nrow(pairwise_results) > 0 && "contrast" %in% colnames(pairwise_results)) {
+  
+  pairwise_final <- pairwise_results %>%
+    separate(contrast, into = c("level1", "level2"), sep = " - ") %>%
+    mutate(
+      comparison = paste(level1, level2, sep = " vs "),
+      p.value = signif(p.value, 4)
+    ) %>%
+    select(level1, level2, Estimate, StdErr, t.value, p.value)
+  
+  # Optional: Remove duplicate pairs (keep a vs b, drop b vs a)
+  pairwise_final_unique <- pairwise_final %>%
+    mutate(pair = map2_chr(level1, level2, ~ paste(sort(c(.x, .y)), collapse = "_"))) %>%
+    distinct(pair, .keep_all = TRUE) %>%
+    select(-pair)
+  
+  print(pairwise_final_unique)
+  
+} else {
+  message("No valid comparisons were found. Check that Strat.Sub levels are modeled correctly.")
+}
+
+write_csv(pairwise_final_unique, here("output/pairwise_final_unique.csv"))
+read.csv(here("output/pairwise_final_unique.csv"))
+# Make it tidy: break contrast into two columns
+pairwise_final <- pairwise_results %>%
+  separate(contrast, into = c("level1", "level2"), sep = " - ") %>%
+  mutate(
+    comparison = paste(level1, level2, sep = " vs "),
+    p.value = signif(p.value, 4)
+  ) %>%
+  select(level1, level2, estimate, std.error, statistic, p.value, comparison)
+
+# Optional: Keep only unique comparisons (e.g., a vs b but not b vs a)
+pairwise_final_unique <- pairwise_final %>%
+  mutate(pair = map2_chr(level1, level2, ~ paste(sort(c(.x, .y)), collapse = "_"))) %>%
+  distinct(pair, .keep_all = TRUE) %>%
+  select(-pair)
+
+# View
+print(pairwise_final_unique)
 
 
-model_strat_sub_mass <- phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Strat.Sub+Mass_ln_std, 
+maneuver_plot <- ggplot(output_p_alarm, aes(Strat.Sub, p_alarm_ln, fill = Strat.Sub, group = Strat.Sub)) +
+  geom_boxplot() +
+  geom_point() +
+  geom_jitter()
+maneuver_plot
+
+output_p_alarm <- output_p_alarm %>%
+  separate(Strat.Sub, into = c("maneuver", "substrate"), sep = "_")
+
+# Plot
+ggplot(output_p_alarm, aes(x = substrate, y = p_alarm_ln, fill = substrate)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.1, alpha = 0.4) +
+  facet_grid(. ~ maneuver, scales = "free_x", space = "free_x") +
+  theme_minimal() +
+  labs(x = "Foraging substrate", y = "Alarm probability (log)", title = "Alarm Calling by Foraging Behavior") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Create a combined factor for x-axis with maneuver and substrate
+output_p_alarm <- output_p_alarm %>%
+  mutate(group_label = paste(maneuver, substrate, sep = "\n"))
+
+# Order group_label by maneuver then substrate for consistent x-axis
+output_p_alarm$group_label <- factor(output_p_alarm$group_label, 
+                                     levels = output_p_alarm %>%
+                                       arrange(maneuver, substrate) %>%
+                                       pull(group_label) %>% unique())
+
+# Plot with boxplot + jitter
+ggplot(output_p_alarm, aes(x = group_label, y = p_alarm_ln, fill = substrate)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.5) +
+  theme_minimal() +
+  labs(x = "Maneuver and Substrate", y = "Alarm probability (log)", 
+       title = "Alarm Calling by Foraging Behavior") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.x = element_blank()) +
+  scale_fill_brewer(palette = "Set2")
+
+# Get maneuver switch points
+maneuver_breaks <- output_p_alarm %>%
+  arrange(maneuver, substrate) %>%
+  distinct(group_label, maneuver) %>%
+  group_by(maneuver) %>%
+  summarise(start = first(group_label), .groups = "drop") %>%
+  mutate(x_pos = match(start, levels(output_p_alarm$group_label))) %>%
+  arrange(x_pos)
+
+# Exclude the first (no line before first group)
+vertical_lines <- maneuver_breaks$x_pos[-1] - 0.5
+
+# Add vertical lines to the plot
+ggplot(output_p_alarm, aes(x = group_label, y = p_alarm_ln, fill = substrate)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.5) +
+  geom_vline(xintercept = vertical_lines, color = "black", linetype = "solid", linewidth = 0.8) +
+  theme_minimal() +
+  labs(x = "Maneuver and Substrate", y = "Alarm probability (log)", 
+       title = "Alarm Calling by Foraging Behavior") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.x = element_blank()) +
+  scale_fill_brewer(palette = "Set2")
+
+# Separate Strat.Sub into maneuver and substrate
+output_p_alarm <- output_p_alarm %>%
+  separate(Strat.Sub, into = c("maneuver", "substrate"), sep = "_")
+
+# Make sure substrate is a factor ordered within maneuver
+output_p_alarm <- output_p_alarm %>%
+  mutate(substrate = factor(substrate, levels = unique(substrate)))
+
+# Plot: maneuver as facet strip (gray boxes), substrate on x-axis
+ggplot(output_p_alarm, aes(x = substrate, y = p_alarm_ln, fill = substrate)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  facet_grid(. ~ maneuver, scales = "free_x", space = "free_x") +
+  theme_minimal() +
+  theme(
+    strip.background = element_rect(fill = "gray90", color = "gray50"),
+    strip.text = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.major.x = element_blank(),
+    panel.spacing.x = unit(1, "lines")
+  ) +
+  labs(x = "Substrate", y = "Alarm probability (log)", title = "Alarm Calling by Maneuver and Substrate") +
+  scale_fill_brewer(palette = "Set2")
+
+# Step 1: Separate Strat.Sub into maneuver and substrate
+output_p_alarm <- output_p_alarm %>%
+  separate(Strat.Sub, into = c("maneuver", "substrate"), sep = "_")
+
+# Step 2: Set substrate factor levels by maneuver for plotting order
+output_p_alarm <- output_p_alarm %>%
+  mutate(substrate = factor(substrate, levels = unique(substrate))) %>%
+  mutate(group_label = paste(maneuver, substrate, sep = "_"))
+
+# Step 3: Create a unique numeric x-axis position to draw vertical lines
+output_p_alarm <- output_p_alarm %>%
+  arrange(maneuver, substrate) %>%
+  mutate(x_axis_pos = as.numeric(factor(group_label, levels = unique(group_label))))
+
+# Step 4: Calculate where maneuver changes (for vlines)
+maneuver_breaks <- output_p_alarm %>%
+  distinct(x_axis_pos, maneuver) %>%
+  group_by(maneuver) %>%
+  summarise(start = min(x_axis_pos), .groups = "drop") %>%
+  arrange(start)
+
+vline_positions <- maneuver_breaks$start[-1] - 0.5  # vertical lines between groups
+
+# Step 5: Plot using geom_boxplot + geom_vline + facet
+plot_maneuver <- ggplot(output_p_alarm, aes(x = substrate, y = p_alarm_ln, fill = substrate)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  facet_grid(. ~ maneuver, scales = "free_x", space = "free_x") +
+  geom_vline(xintercept = vline_positions, color = "black", size = 0.8) +
+  theme_minimal() +
+  theme(
+    strip.background = element_rect(fill = "gray90", color = "gray50"),
+    strip.text = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.major.x = element_blank(),
+    panel.spacing.x = unit(1, "lines")
+  ) +
+  labs(x = "Substrate", y = "Alarm probability (log)", title = "Alarm Calling by Maneuver and Substrate") +
+  scale_fill_brewer(palette = "Set2")
+ggsave(here("figs/plot_maneuver.png"), plot = plot_maneuver)
+
+dmodel_strat_sub_mass <- phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Strat.Sub+Mass_ln_std, 
                            data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda")
 # Fit model with interaction term
 model <- phylolm(p_alarm_ln ~ Foraging.Strategy.y, 
@@ -873,7 +1118,7 @@ output_p_alarm$Foraging.Strategy.y <- as.factor(output_p_alarm$Foraging.Strategy
 
 # Plot with correct scaling and interaction
 ggplot(output_p_alarm, aes(x = SocialGroup_factor_lumped_numeric, 
-                           y = predicted_p_alarm, color = Foraging.Strategy.y, group = Foraging.Strategy.y)) +
+                           y = p_alarm_ln, color = Strat.Sub, group = Strat.Sub)) +
   geom_point(size = 3) +  
   geom_smooth(method = "lm", se = FALSE) +  # Use lines instead of smoothing to match model estimates
   labs(x = "Social Group", y = "Predicted Alarm Probability", color = "Foraging Strategy",
@@ -951,14 +1196,10 @@ forage_plot <- ggplot(output_p_alarm_clean, aes(x = SocialGroup_factor_lumped_nu
                      limits = c(min(y_limits$min_p_alarm), max(y_limits$max_p_alarm)))  # Set y-axis limits
 
 
-# Assuming 'Frugivore' should be the label for NA values in the legend
-library(ggplot2)
-
 # Ensure 'Frugivore' is the reference level in 'Trophic.Niche'
 output_p_alarm$Trophic.Niche <- factor(output_p_alarm$Trophic.Niche, 
                                        levels = c("Frugivore", "Granivore", "Invertivore", "Omnivore"))
 
-library(ggplot2)
 
 # Ensure 'Frugivore' is the reference level in 'Trophic.Niche'
 output_p_alarm$Trophic.Niche[is.na(output_p_alarm$Trophic.Niche)] <- "Frugivore"
