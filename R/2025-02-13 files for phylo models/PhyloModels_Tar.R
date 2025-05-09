@@ -294,20 +294,6 @@ check_collinearity(full_model_noeyes)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 df_msp_clean %>% count(Tar_Sex, alarm)
 #good separation on sex
 #my gut feeling is that the categorical terms are heavily phylogenetically structured, so those two pieces could be competing for variance.
@@ -321,7 +307,8 @@ cleaned_data$abundance_log<-log(cleaned_data$abundance)
 cleaned_data$SocialGroup_factor<-factor(cleaned_data$SocialGroup, levels = c("solo", "ant" , "lek","pair", "ssf", "msf"))
 ggplot(cleaned_data, aes(y=abundance_log, x=SocialGroup_factor, color=SocialGroup_factor))+
   geom_point()+
-  geom_boxplot()
+  geom_violin()+
+  theme_minimal()
 #yeah this tracks
 cleaned_data$SocialGroup_factor_lumped<-cleaned_data$SocialGroup_factor
 cleaned_data$SocialGroup_factor_lumped[cleaned_data$SocialGroup_factor_lumped=="ant"]<-"msf"
@@ -526,8 +513,17 @@ output_p_alarm$SocialGroup_factor_lumped<-factor(output_p_alarm$SocialGroup_fact
 
 plot_social <- ggplot(output_p_alarm, aes(y=p_alarm, x=SocialGroup_factor, color=SocialGroup_factor))+
   geom_violin()+geom_boxplot()+geom_point()
-social_lump_plot <- ggplot(output_p_alarm, aes(y=p_alarm, x=SocialGroup_factor_lumped, color=SocialGroup_factor))+geom_violin()+geom_boxplot()+geom_jitter()+geom_point()
-ggsave(here("figs/SocialGroup_Lump_Plot.png"), plot = social_lump_plot)
+plot_social
+output_p_alarm$p_alarm_exp <- plogis(output_p_alarm$p_alarm)
+social_lump_plot <- ggplot(output_p_alarm, aes(y=p_alarm, x=SocialGroup_factor_lumped, color=SocialGroup_factor))+
+  geom_violin()+
+  geom_boxplot()+
+  geom_point()+
+  geom_jitter()+
+  labs(title = "Alarm Call Probability Across Social Complexity", y = "Alarm Call Probability", x = "Social Group", color = "Social Groups" ) +
+  theme_minimal()
+social_lump_plot
+ggsave(here("figs/SocialGroup_Lump_Plot.png"), plot = social_lump_plot, dpi = 600, height = 5, width = 6)
 row.names(output_p_alarm)<-output_p_alarm$Species3
 output_p_alarm$p_alarm_ln<-log(output_p_alarm$p_alarm)
 output_p_alarm$SocialGroup_factor_lumped_numeric<-as.numeric(output_p_alarm$SocialGroup_factor_lumped)
@@ -743,8 +739,8 @@ summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche,
 # 
 # Note: p-values and R-squared are conditional on lambda=1.
 
-summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+Foraging.Strategy.y, 
-                data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda"))
+# summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+Foraging.Strategy.y, 
+#                 data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda"))
 
 # Call:
 #   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + 
@@ -783,8 +779,8 @@ summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Trophic.Niche+Forag
 
 # potential fix for colinear categorical variables:smash columns together so they all become uniquely categorical
 
-summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Foraging.Strategy.y, 
-                data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda"))
+#summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Foraging.Strategy.y, 
+#                data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda"))
 # Call:
 #   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + 
 #             Foraging.Strategy.y, data = output_p_alarm, phy = keep.tip(tree, 
@@ -955,15 +951,15 @@ if (nrow(pairwise_results) > 0 && "contrast" %in% colnames(pairwise_results)) {
 }
 
 write_csv(pairwise_final_unique, here("output/pairwise_final_unique.csv"))
-read.csv(here("output/pairwise_final_unique.csv"))
+pairwise_final_unique <- read.csv(here("output/pairwise_final_unique.csv"))
 # Make it tidy: break contrast into two columns
-pairwise_final <- pairwise_results %>%
-  separate(contrast, into = c("level1", "level2"), sep = " - ") %>%
-  mutate(
-    comparison = paste(level1, level2, sep = " vs "),
-    p.value = signif(p.value, 4)
-  ) %>%
-  select(level1, level2, estimate, std.error, statistic, p.value, comparison)
+# pairwise_final <- pairwise_results %>%
+#   separate(contrast, into = c("level1", "level2"), sep = " - ") %>%
+#   mutate(
+#     comparison = paste(level1, level2, sep = " vs "),
+#     p.value = signif(p.value, 4)
+#   ) %>%
+#   select(level1, level2, estimate, std.error, statistic, p.value, comparison)
 
 # Optional: Keep only unique comparisons (e.g., a vs b but not b vs a)
 pairwise_final_unique <- pairwise_final %>%
@@ -973,6 +969,67 @@ pairwise_final_unique <- pairwise_final %>%
 
 # View
 print(pairwise_final_unique)
+
+# Load packages
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+
+# Assuming your data is in a CSV file, or you paste it in as a data frame
+# Example read-in (adjust path as needed):
+# pairwise_df <- read_csv("pairwise_comparisons.csv")
+
+df <- pairwise_final_unique
+# If already in R, ensure the column types are correct:
+# Add significance stars
+df <- df %>%
+  mutate(sig = case_when(
+    p.value <= 0.001 ~ "***",
+    p.value <= 0.01  ~ "**",
+    p.value <= 0.05  ~ "*",
+    p.value <= 0.1   ~ ".",
+    TRUE             ~ ""
+  ))
+
+# Create a full matrix of comparisons
+all_levels <- unique(c(df$level1, df$level2))
+mat <- expand.grid(level1 = all_levels, level2 = all_levels, stringsAsFactors = FALSE)
+
+# Merge in estimates and significance
+mat <- mat %>%
+  left_join(df %>% select(level1, level2, Estimate, sig), by = c("level1", "level2")) %>%
+  mutate(label = ifelse(!is.na(Estimate), paste0(round(Estimate, 2), sig), NA))
+
+# Make matrix symmetric
+mat_mirror <- df %>%
+  transmute(level1 = level2, level2 = level1,
+            Estimate = -Estimate,  # flip sign for symmetry
+            sig = sig) %>%
+  mutate(label = ifelse(!is.na(Estimate), paste0(round(Estimate, 2), sig), NA))
+
+# Remove upper triangle and diagonal
+mat_full_clean <- mat_full %>%
+  filter(as.numeric(factor(level1)) > as.numeric(factor(level2))) 
+
+# Plot
+ggplot(mat_full_clean, aes(x = level1, y = level2, fill = Estimate)) +
+  geom_tile(color = "black") +
+  geom_text(aes(label = round(Estimate, 2)), size = 3, vjust = -0.5) +
+  geom_text(aes(label = sig), size = 3, vjust = 1.5) +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0,
+                       limit = c(min(mat_full_clean$Estimate, na.rm = TRUE), 
+                                 max(mat_full_clean$Estimate, na.rm = TRUE)),
+                       name = "Estimate") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid = element_blank()) +
+  labs(x = NULL, y = NULL,
+       title = "Pairwise Comparison Matrix (Maneuver_Substrate)")
+ggsave(here("figs/PairwiseComparisonMatrix_v1.png"), plot = last_plot())
+
+
+
 
 
 maneuver_plot <- ggplot(output_p_alarm, aes(Strat.Sub, p_alarm_ln, fill = Strat.Sub, group = Strat.Sub)) +
@@ -1090,7 +1147,6 @@ plot_maneuver <- ggplot(output_p_alarm, aes(x = substrate, y = p_alarm_ln, fill 
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(width = 0.2, alpha = 0.5) +
   facet_grid(. ~ maneuver, scales = "free_x", space = "free_x") +
-  geom_vline(xintercept = vline_positions, color = "black", size = 0.8) +
   theme_minimal() +
   theme(
     strip.background = element_rect(fill = "gray90", color = "gray50"),
@@ -1105,16 +1161,16 @@ ggsave(here("figs/plot_maneuver.png"), plot = plot_maneuver)
 
 dmodel_strat_sub_mass <- phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Strat.Sub+Mass_ln_std, 
                            data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda")
-# Fit model with interaction term
-model <- phylolm(p_alarm_ln ~ Foraging.Strategy.y, 
-                 data = output_p_alarm, phy = keep.tip(tree, output_p_alarm$Species3), model = "lambda")
-summary(model)
+# # Fit model with interaction term
+# model <- phylolm(p_alarm_ln ~ Foraging.Strategy.y, 
+#                  data = output_p_alarm, phy = keep.tip(tree, output_p_alarm$Species3), model = "lambda")
+# summary(model)
 
 # Get predicted values including interaction
 output_p_alarm$predicted_p_alarm <- exp(predict(model))  # Back-transform log values
 
-# Convert Foraging Strategy to factor if not already
-output_p_alarm$Foraging.Strategy.y <- as.factor(output_p_alarm$Foraging.Strategy.y)
+# # Convert Foraging Strategy to factor if not already
+# output_p_alarm$Foraging.Strategy.y <- as.factor(output_p_alarm$Foraging.Strategy.y)
 
 # Plot with correct scaling and interaction
 ggplot(output_p_alarm, aes(x = SocialGroup_factor_lumped_numeric, 
@@ -1168,32 +1224,32 @@ ggsave(here("figs/TrophicPlot.png"), plot = diet_plot)
 output_p_alarm_clean <- output_p_alarm %>%
   filter(is.finite(p_alarm))  # Keep only finite values for p_alarm
 
-# Get the min and max values of p_alarm for each Foraging Strategy
-y_limits <- output_p_alarm_clean %>%
-  group_by(Foraging.Strategy.y) %>%
-  summarise(min_p_alarm = min(p_alarm, na.rm = TRUE), 
-            max_p_alarm = max(p_alarm, na.rm = TRUE))
+# # Get the min and max values of p_alarm for each Foraging Strategy
+# y_limits <- output_p_alarm_clean %>%
+#   group_by(Foraging.Strategy.y) %>%
+#   summarise(min_p_alarm = min(p_alarm, na.rm = TRUE), 
+#             max_p_alarm = max(p_alarm, na.rm = TRUE))
 
 # Create the plot with cleaned data and facetting by Foraging Strategy
-forage_plot <- ggplot(output_p_alarm_clean, aes(x = SocialGroup_factor_lumped_numeric, y = p_alarm, color = Foraging.Strategy.y, group = Foraging.Strategy.y)) +
-  geom_point() +  # Scatter plot for data points
-  geom_jitter(width = 0.1) +  # Add jitter to avoid overlapping
-  geom_smooth(method = "lm", se = FALSE, linetype = "solid") +  # Linear model line
-  theme_minimal() +
-  labs(title = "Linear Model of p_alarm with Social Group and Foraging Strategy",
-       x = "Social Group (Numeric)",
-       y = "Alarm Calls (p_alarm)",
-       color = "Foraging Strategy") +
-  theme(legend.position = "right") +
-  theme(legend.title = element_text(face = "bold")) +
-  scale_color_manual(values = c("probe" = "purple", 
-                                "ground" = "brown", 
-                                "glean" = "darkgreen", 
-                                "sally" = "red",
-                                "hop" = "blue")) +
-  facet_grid(Foraging.Strategy.y ~ ., scales = "free_y", space = "free_y") +  # Facet by Foraging Strategy with free y-axis
-  scale_y_continuous(labels = scales::label_number(),  # Ensures proper labeling
-                     limits = c(min(y_limits$min_p_alarm), max(y_limits$max_p_alarm)))  # Set y-axis limits
+# forage_plot <- ggplot(output_p_alarm_clean, aes(x = SocialGroup_factor_lumped_numeric, y = p_alarm, color = Foraging.Strategy.y, group = Foraging.Strategy.y)) +
+#   geom_point() +  # Scatter plot for data points
+#   geom_jitter(width = 0.1) +  # Add jitter to avoid overlapping
+#   geom_smooth(method = "lm", se = FALSE, linetype = "solid") +  # Linear model line
+#   theme_minimal() +
+#   labs(title = "Linear Model of p_alarm with Social Group and Foraging Strategy",
+#        x = "Social Group (Numeric)",
+#        y = "Alarm Calls (p_alarm)",
+#        color = "Foraging Strategy") +
+#   theme(legend.position = "right") +
+#   theme(legend.title = element_text(face = "bold")) +
+#   scale_color_manual(values = c("probe" = "purple", 
+#                                 "ground" = "brown", 
+#                                 "glean" = "darkgreen", 
+#                                 "sally" = "red",
+#                                 "hop" = "blue")) +
+#   facet_grid(Foraging.Strategy.y ~ ., scales = "free_y", space = "free_y") +  # Facet by Foraging Strategy with free y-axis
+#   scale_y_continuous(labels = scales::label_number(),  # Ensures proper labeling
+#                      limits = c(min(y_limits$min_p_alarm), max(y_limits$max_p_alarm)))  # Set y-axis limits
 
 
 # Ensure 'Frugivore' is the reference level in 'Trophic.Niche'
@@ -1234,10 +1290,10 @@ ggplot(output_p_alarm, aes(x = SocialGroup_factor_lumped_numeric, y = p_alarm_ln
 
 
 
-table(output_p_alarm$SocialGroup_factor_lumped_numeric, output_p_alarm$Foraging.Strategy.y)
-chisq.test(table(output_p_alarm$SocialGroup_factor_lumped_numeric, output_p_alarm$Foraging.Strategy.y))
+# table(output_p_alarm$SocialGroup_factor_lumped_numeric, output_p_alarm$Foraging.Strategy.y)
+# chisq.test(table(output_p_alarm$SocialGroup_factor_lumped_numeric, output_p_alarm$Foraging.Strategy.y))
 library(car)
-model <- lm(p_alarm_ln ~ SocialGroup_factor_lumped_numeric + Trophic.Niche + Foraging.Strategy.y, data = output_p_alarm)
+# model <- lm(p_alarm_ln ~ SocialGroup_factor_lumped_numeric + Trophic.Niche + Foraging.Strategy.y, data = output_p_alarm)
 vif(model)
 
 # Ensure 'Frugivore' is the reference level in 'Trophic.Niche'
