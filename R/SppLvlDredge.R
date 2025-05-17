@@ -3,6 +3,7 @@
 ########################################################################################################
 
 # Load necessary packages
+library(AICcmodavg)
 library(dplyr)
 library(readr)
 library(here)
@@ -70,44 +71,42 @@ species_list <- inputdata %>%
   filter(sample_size >= min_sample_size) %>%
   pull(TarSpp)
 
-# Initialize a list to store model summaries
-model_summaries <- list()
 
-# Iterate over each species in the filtered list
+# Store summaries and aictabs
+model_summaries <- list()
+aictab_outputs <- list()
+
 for (species in species_list) {
-  # Filter data for the current species
   species_data <- inputdata %>%
     filter(TarSpp == species) %>%
     filter(rowSums(is.na(select(., all_of(predictors)))) == 0)
   
-  # Recheck sample size after filtering
   if (nrow(species_data) < min_sample_size) {
     cat("Skipping species:", species, "- Sample size after filtering:", nrow(species_data), "\n")
     next
   }
   
-  # Debugging: Output sample size for the species
   cat("Processing species:", species, "- Sample size:", nrow(species_data), "\n")
   
-  # Iterate over the number of predictors in the model
+  # Lists to store models and names
+  species_models <- list()
+  model_names <- c()
+  
   for (num_predictors in 1:3) {
-    # Generate all combinations of predictors for the current number
     predictor_combinations <- combn(predictors, num_predictors, simplify = FALSE)
     
     for (combination in predictor_combinations) {
-      # Check if all predictors in the combination have sufficient levels
-      valid_combination <- all(sapply(combination, function(var) length(unique(species_data[[var]])) > 1))
-      if (!valid_combination) next
+      if (!all(sapply(combination, function(var) length(unique(species_data[[var]])) > 1))) next
       
-      # Always include the predictors in the model
       predictor_terms <- paste(combination, collapse = " + ")
-      
-      # Test the model with predictors only
       formula_str <- paste("Alarm_Presence ~", predictor_terms)
       model <- glm(as.formula(formula_str), data = species_data, family = binomial)
       
-      # Store the summary
-      model_summaries[[paste(species, paste(combination, collapse = "_"), sep = "_")]] <- tidy(model) %>%
+      model_id <- paste(species, paste(combination, collapse = "_"), sep = "_")
+      species_models[[model_id]] <- model
+      model_names <- c(model_names, model_id)
+      
+      model_summaries[[model_id]] <- tidy(model) %>%
         mutate(species = species,
                predictors = predictor_terms,
                interactions = "None",
@@ -115,37 +114,48 @@ for (species in species_list) {
                BIC = BIC(model),
                sample_size = nrow(species_data))
       
-      # For 2 predictors, include interaction terms
+      # Include interactions if 2 predictors
       if (num_predictors == 2) {
         interaction_terms <- combn(combination, 2, function(x) paste(x, collapse = ":"), simplify = TRUE)
         interaction_terms_str <- paste(interaction_terms, collapse = " + ")
-        
-        # Test the model with predictors + interactions
         formula_str_with_interactions <- paste("Alarm_Presence ~", paste(predictor_terms, interaction_terms_str, sep = " + "))
-        model_with_interactions <- glm(as.formula(formula_str_with_interactions), data = species_data, family = binomial)
+        model_interact <- glm(as.formula(formula_str_with_interactions), data = species_data, family = binomial)
         
-        # Store the summary
-        model_summaries[[paste(species, paste(combination, collapse = "_"), "interactions", sep = "_")]] <- tidy(model_with_interactions) %>%
+        interact_id <- paste(species, paste(combination, collapse = "_"), "interactions", sep = "_")
+        species_models[[interact_id]] <- model_interact
+        model_names <- c(model_names, interact_id)
+        
+        model_summaries[[interact_id]] <- tidy(model_interact) %>%
           mutate(species = species,
                  predictors = predictor_terms,
                  interactions = interaction_terms_str,
-                 AIC = AIC(model_with_interactions),
-                 BIC = BIC(model_with_interactions),
+                 AIC = AIC(model_interact),
+                 BIC = BIC(model_interact),
                  sample_size = nrow(species_data))
       }
     }
   }
+  
+  # Generate species-safe variable name
+  species_varname <- gsub("[^A-Za-z0-9]", "_", species)
+  assign(paste0("models_", species_varname),
+         aictab(cand.set = species_models, modnames = model_names))
+  aictab_outputs[[species]] <- aictab(cand.set = species_models, modnames = model_names)
 }
 
 # Combine all summaries into one data frame
 all_summaries <- bind_rows(model_summaries)
 
 # Export the combined summaries to a CSV file
-write_csv(all_summaries, here("output/GLM_summaries_3Predictors_SppLvl.csv"))
+write_csv(all_summaries, here("output/GLM_summaries_3Predictors_SppLvl_DeltaAIC.csv"))
 
 cat("Model summaries saved to 'output/GLM_summaries_3Predictors_SppLvl.csv'\n")
 
 view(read_csv(here("output/GLM_summaries_3Predictors_SppLvl.csv")))
+GLM_sum <- read_csv(here("output/GLM_summaries_3Predictors_SppLvl.csv"))
+
+# calculate AIC and model averages
+aictab(cand.set = GLM_sum, modnames = mod.names)
 
 # add columns to df: delta AICC, AICC, Index models for groupby(), AICC weight - number from 0 to 1 to describe influence of model
 # take a weighted average of coefficient values

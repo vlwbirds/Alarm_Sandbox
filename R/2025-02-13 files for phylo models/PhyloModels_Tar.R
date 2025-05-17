@@ -247,7 +247,7 @@ df_msp<-left_join(df_msp , eyes %>% transmute(Species1=Species1, res_ad=res_ad, 
 #first to make sure we have good predictors that are not correlated we can fit an exploratory glm
 df_msp_clean<-df_msp %>% select(c("Species1", "Species3", "alarm", "Tar_Sex", "Pre_Bird_Height", "SocialGroup", "Mass", "Trophic.Niche", "foraging_stratum", "res_ad","res_td"))
 #do we need transformations before we do standardization?
-ggpairs(df_msp_clean %>% select(-c(which(names(df_msp_clean) %in% c("Species1", "Species3"))))  )
+# ggpairs(df_msp_clean %>% select(-c(which(names(df_msp_clean) %in% c("Species1", "Species3"))))  )
 #yep, mass and pre bird heigt
 df_msp_clean$Pre_Bird_Height_ln<-log(df_msp_clean$Pre_Bird_Height+1) #plus one to avoid Inf bc you cant log 0
 df_msp_clean$Mass_ln<-log(df_msp_clean$Mass)
@@ -258,7 +258,7 @@ df_msp_clean$foraging_stratum_std<-as.numeric(scale(df_msp_clean$foraging_stratu
 df_msp_clean$res_ad_std<-as.numeric(scale(df_msp_clean$res_ad))
 df_msp_clean$res_td_std<-as.numeric(scale(df_msp_clean$res_td))
 #ggpairs(df_msp_clean %>% select(-c(which(names(df_msp_clean) %in% c("Species1", "Species3")))))
-ggpairs(df_msp_clean %>% select(c("alarm", "Tar_Sex", "Pre_Bird_Height_ln_std","SocialGroup","Trophic.Niche","foraging_stratum_std","Mass_ln_std","res_ad_std")))
+#ggpairs(df_msp_clean %>% select(c("alarm", "Tar_Sex", "Pre_Bird_Height_ln_std","SocialGroup","Trophic.Niche","foraging_stratum_std","Mass_ln_std","res_ad_std")))
 
 
 full_model<-glm(alarm~Tar_Sex+Pre_Bird_Height_ln_std+
@@ -503,6 +503,10 @@ foraging_strategy <- foraging_strategy %>% rename(Species3 = BirdTree)
 output_p_alarm <- read_csv(here("output/analysis/PhyloAlarmProbability_Tar.csv"))
 output_p_alarm <- output_p_alarm %>%
   left_join(foraging_strategy, by = "Species3")
+
+# todo join mass
+output_p_alarm <- df_msp_clean %>% 
+  left_join(Mass_ln_std, by = "Species3")
 species_level_data<-df_msp_clean %>% group_by(Species3) %>% slice(1) %>% select(c(1,2,6:11))
 output_p_alarm<-left_join(output_p_alarm, species_level_data)
 output_p_alarm$SocialGroup_factor<-factor(output_p_alarm$SocialGroup, levels = c("solo", "ant" , "lek","pair", "ssf", "msf"))
@@ -532,10 +536,12 @@ output_p_alarm$SocialGroup_factor_lumped_numeric<-as.numeric(output_p_alarm$Soci
 output_p_alarm <- as.data.frame(output_p_alarm)
 row.names(output_p_alarm) <- output_p_alarm$Species3
 
-summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric, 
+# build global model
+
+summary(phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric + Strat.Sub.x, 
                 data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3)), model="lambda")
 
-# Call:
+# Call:# Call:# Call:
 #   phylolm(formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric, 
 #           data = output_p_alarm, phy = keep.tip(tree, output_p_alarm$Species3))
 # 
@@ -818,7 +824,7 @@ summary(model_strat_sub)
 output_p_alarm$Strat.Sub <- gsub("_grean","_green",output_p_alarm$Strat.Sub)
 output_p_alarm$Strat.Sub <- gsub(" _bark","_bark",output_p_alarm$Strat.Sub)
 table(output_p_alarm$Strat.Sub)
-model_strat_sub <- phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Strat.Sub, 
+model_strat_sub <- phylolm(p_alarm_ln~SocialGroup_factor_lumped_numeric+Strat.Sub.x, 
                 data = output_p_alarm, phy=keep.tip(tree, output_p_alarm$Species3), model="lambda")
 summary(model_strat_sub)
 
@@ -877,8 +883,8 @@ library(purrr)
 library(broom)
 
 # Get the full list of Strat.Sub levels
-output_p_alarm$Strat.Sub <- factor(output_p_alarm$Strat.Sub)
-levels_list <- levels(output_p_alarm$Strat.Sub)
+output_p_alarm$Strat.Sub.x <- factor(output_p_alarm$Strat.Sub.x)
+levels_list <- levels(output_p_alarm$Strat.Sub.x)
 
 # Initialize a data frame to store all pairwise results
 pairwise_results <- data.frame()
@@ -888,14 +894,14 @@ for (ref_level in levels_list) {
   
   # Relevel Strat.Sub so current level is the reference
   df_temp <- output_p_alarm
-  df_temp$Strat.Sub <- relevel(factor(df_temp$Strat.Sub), ref = ref_level)
+  df_temp$Strat.Sub.x <- relevel(factor(df_temp$Strat.Sub.x), ref = ref_level)
   
   # Prune the tree to match the data
   phy_temp <- keep.tip(tree, df_temp$Species3)
   
   # Fit the phylolm model
   model <- phylolm(
-    formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + Strat.Sub,
+    formula = p_alarm_ln ~ SocialGroup_factor_lumped_numeric + Strat.Sub.x,
     data = df_temp,
     phy = phy_temp,
     model = "lambda"
@@ -909,10 +915,10 @@ for (ref_level in levels_list) {
   
   # Filter for Strat.Sub comparisons (skip intercept and SocialGroup)
   comp_rows <- model_tidy %>%
-    filter(grepl("^Strat.Sub", term)) %>%
+    filter(grepl("^Strat.Sub.x", term)) %>%
     mutate(
       intercept = ref_level,
-      comparison = gsub("Strat.Sub", "", term),
+      comparison = gsub("Strat.Sub.x", "", term),
       contrast = paste0(comparison, " - ", intercept)
     ) %>%
     select(contrast, Estimate, StdErr, t.value, p.value)
@@ -950,8 +956,8 @@ if (nrow(pairwise_results) > 0 && "contrast" %in% colnames(pairwise_results)) {
   message("No valid comparisons were found. Check that Strat.Sub levels are modeled correctly.")
 }
 
-write_csv(pairwise_final_unique, here("output/pairwise_final_unique.csv"))
-pairwise_final_unique <- read.csv(here("output/pairwise_final_unique.csv"))
+write_csv(pairwise_final_unique, here("output/pairwise_final_unique_v2.csv"))
+pairwise_final_unique <- read.csv(here("output/pairwise_final_unique_v2.csv"))
 # Make it tidy: break contrast into two columns
 # pairwise_final <- pairwise_results %>%
 #   separate(contrast, into = c("level1", "level2"), sep = " - ") %>%
@@ -1008,9 +1014,11 @@ mat_mirror <- df %>%
             sig = sig) %>%
   mutate(label = ifelse(!is.na(Estimate), paste0(round(Estimate, 2), sig), NA))
 
-# Remove upper triangle and diagonal
+mat_full <- bind_rows(mat, mat_mirror)
+
 mat_full_clean <- mat_full %>%
-  filter(as.numeric(factor(level1)) > as.numeric(factor(level2))) 
+  filter(as.numeric(factor(level1)) > as.numeric(factor(level2)))
+
 
 # Plot
 ggplot(mat_full_clean, aes(x = level1, y = level2, fill = Estimate)) +
@@ -1026,13 +1034,13 @@ ggplot(mat_full_clean, aes(x = level1, y = level2, fill = Estimate)) +
         panel.grid = element_blank()) +
   labs(x = NULL, y = NULL,
        title = "Pairwise Comparison Matrix (Maneuver_Substrate)")
-ggsave(here("figs/PairwiseComparisonMatrix_v1.png"), plot = last_plot())
+ggsave(here("figs/PairwiseComparisonMatrix_v2.png"), plot = last_plot())
 
 
 
 
 
-maneuver_plot <- ggplot(output_p_alarm, aes(Strat.Sub, p_alarm_ln, fill = Strat.Sub, group = Strat.Sub)) +
+maneuver_plot <- ggplot(output_p_alarm, aes(Strat.Sub.x, p_alarm_ln, fill = Strat.Sub.x, group = Strat.Sub.x)) +
   geom_boxplot() +
   geom_point() +
   geom_jitter()
